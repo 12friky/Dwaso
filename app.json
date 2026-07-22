@@ -58,7 +58,7 @@
           "icon": "./assets/images/icon.png",
           "color": "#E8943A",
           "sounds": [
-            "./assets/sounds/message tone.mp3"
+            "./assets/sounds/message_tone.mp3"
           ]
         }
       ]
