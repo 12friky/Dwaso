@@ -3,7 +3,7 @@
  * Detail screen for PRODUCT requests — beautiful modern redesign.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, View, Text, ScrollView, TouchableOpacity,
   Dimensions, Image, ActivityIndicator, Modal, Linking, Alert,
@@ -15,8 +15,7 @@ import { getPostByIdApi, getOrCreateConversationApi, getMeApi, type Post } from 
 import { useAuth }  from '../../store/authStore';
 import { useSaved } from '../../store/savedStore';
 
-const BG    = '#F2EFE6';
-const CARD  = '#FFFFFF';
+const BG    = '#FFFFFF';
 const DARK  = '#1B3A2D';
 const AMBER = '#E8943A';
 const GREEN = '#2E7D52';
@@ -51,7 +50,19 @@ const catStyle = (cat: string) => CAT_COLORS[cat] ?? { bg: CATBG, color: DARK };
 
 function ImageSection({ images, category }: { images: string[]; category: string }) {
   const [activeIdx, setActiveIdx] = useState(0);
+  const activeIdxRef = useRef(0);
+  const scrollRef = useRef<ScrollView>(null);
   const { bg, color } = catStyle(category);
+  useEffect(() => {
+    if (images.length < 2) return;
+    const interval = setInterval(() => {
+      const next = (activeIdxRef.current + 1) % images.length;
+      activeIdxRef.current = next;
+      setActiveIdx(next);
+      scrollRef.current?.scrollTo({ x: next * SCREEN_W, animated: true });
+    }, 5_000);
+    return () => clearInterval(interval);
+  }, [images.length]);
   if (images.length === 0) {
     return (
       <View style={[imgSt.box, { backgroundColor: bg }]}>
@@ -63,10 +74,13 @@ function ImageSection({ images, category }: { images: string[]; category: string
   return (
     <View>
       <ScrollView
+        ref={scrollRef}
         horizontal pagingEnabled showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) =>
-          setActiveIdx(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))
-        }
+        onMomentumScrollEnd={(e) => {
+          const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
+          activeIdxRef.current = index;
+          setActiveIdx(index);
+        }}
       >
         {images.map((uri, i) => (
           <Image key={i} source={{ uri }} style={imgSt.slide} resizeMode="cover" />
@@ -149,8 +163,8 @@ export default function ProductDetailScreen() {
 
   useEffect(() => {
     if (!id) { setError('No post ID provided.'); setLoading(false); return; }
-    getPostByIdApi(id).then((res) => setPost(res.data.post)).catch((err) => setError(err?.message ?? 'Failed to load post.')).finally(() => setLoading(false));
-  }, [id]);
+    getPostByIdApi(id, accessToken ?? undefined).then((res) => setPost(res.data.post)).catch((err) => setError(err?.message ?? 'Failed to load post.')).finally(() => setLoading(false));
+  }, [id, accessToken]);
 
   const goBack = () => {
     if (from === '/home/services')         router.replace('/home/services');
@@ -193,9 +207,7 @@ export default function ProductDetailScreen() {
     </View>
   );
 
-  const buyer       = post.user;
   const savedState  = isSaved(post._id);
-  const initials    = buyer.fullName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
   const contactPref = ((post as any).contactPreference ?? 'Chat') as string;
 
   const specs: Array<{ label: string; value: string }> = [];
@@ -236,9 +248,9 @@ export default function ProductDetailScreen() {
               <View style={[styles.statIcon, { backgroundColor: '#FEF3E2' }]}><Ionicons name="cash-outline" size={16} color={AMBER} /></View>
               <View><Text style={styles.statLabel}>Budget</Text><Text style={styles.statValue}>{formatBudget(post.budget)}</Text></View>
             </View>
-            <View style={styles.statPill}>
+            <View style={[styles.statPill, styles.locationPill]}>
               <View style={[styles.statIcon, { backgroundColor: '#E8F4EC' }]}><Ionicons name="location-outline" size={16} color={GREEN} /></View>
-              <View><Text style={styles.statLabel}>Location</Text><Text style={styles.statValue} numberOfLines={1}>{post.location}</Text></View>
+              <View style={styles.statText}><Text style={styles.statLabel}>Location</Text><Text style={styles.statValue} numberOfLines={1}>{post.location}</Text></View>
             </View>
             <View style={styles.statPill}>
               <View style={[styles.statIcon, { backgroundColor: '#EAF0FB' }]}><Ionicons name="radio-button-on-outline" size={16} color="#3B6FD4" /></View>
@@ -260,24 +272,6 @@ export default function ProductDetailScreen() {
             </View>
           </View>
         )}
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionHeading}>Posted by</Text>
-          <View style={styles.buyerCard}>
-            <View style={styles.buyerAvatarWrap}>
-              {buyer.profilePicture
-                ? <Image source={{ uri: buyer.profilePicture }} style={styles.buyerAvatar} />
-                : <View style={[styles.buyerAvatar, { backgroundColor: AMBER, alignItems: 'center', justifyContent: 'center' }]}><Text style={styles.buyerInitials}>{initials}</Text></View>
-              }
-              <View style={styles.onlineDot} />
-            </View>
-            <View style={styles.buyerInfo}>
-              <Text style={styles.buyerName}>{buyer.fullName}</Text>
-              <View style={styles.verifiedRow}><Ionicons name="shield-checkmark" size={12} color={GREEN} /><Text style={styles.verifiedText}>Verified Buyer</Text></View>
-            </View>
-            <View style={styles.buyerBadge}><Text style={styles.buyerBadgeText}>Buyer</Text></View>
-          </View>
-        </View>
 
         <View style={styles.tipBanner}>
           <View style={styles.tipIconBox}><Ionicons name="bulb-outline" size={20} color={AMBER} /></View>
@@ -326,9 +320,9 @@ const styles = StyleSheet.create({
   retryText:   { fontSize: 13, fontWeight: '700', color: '#fff' },
 
   floatRow: { position: 'absolute', left: 0, right: 0, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20 },
-  floatBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
+  floatBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(242,239,230,0.92)', alignItems: 'center', justifyContent: 'center' },
 
-  contentCard: { backgroundColor: CARD, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -24, paddingHorizontal: 20, paddingTop: 22, paddingBottom: 4, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: -2 }, elevation: 3 },
+  contentCard: { marginTop: -24, paddingHorizontal: 20, paddingTop: 22, paddingBottom: 4 },
 
   chipRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   catChip:       { backgroundColor: CATBG, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 },
@@ -341,17 +335,19 @@ const styles = StyleSheet.create({
   postedAt:  { fontSize: 11, color: MUTED, marginBottom: 18 },
 
   statRow:  { flexDirection: 'row', gap: 10, marginBottom: 6 },
-  statPill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BG, borderRadius: 14, padding: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2, borderWidth: 1, borderColor: '#EAE6DC' },
+  statPill: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10 },
+  locationPill: { flex: 1.35 },
+  statText: { flex: 1, minWidth: 0 },
   statIcon:  { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   statLabel: { fontSize: 9, color: MUTED, fontWeight: '600' },
   statValue: { fontSize: 11, fontWeight: '800', color: DARK },
 
-  sectionCard:    { backgroundColor: CARD, borderRadius: 16, padding: 18, marginHorizontal: 16, marginTop: 12, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
+  sectionCard:    { padding: 18, marginHorizontal: 16, marginTop: 12 },
   sectionHeading: { fontSize: 13, fontWeight: '700', color: DARK, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
   descText:       { fontSize: 13, color: '#5A6E65', lineHeight: 22 },
 
   specGrid:       { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  specChip:       { backgroundColor: BG, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, minWidth: '46%', flex: 1, borderWidth: 1, borderColor: '#EAE6DC' },
+  specChip:       { paddingHorizontal: 12, paddingVertical: 8, minWidth: '46%', flex: 1 },
   specChipLabel:  { fontSize: 10, color: MUTED, fontWeight: '600', marginBottom: 2 },
   specChipValue:  { fontSize: 13, fontWeight: '700', color: DARK },
 
@@ -367,17 +363,17 @@ const styles = StyleSheet.create({
   buyerBadge:      { backgroundColor: '#E8F4EC', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   buyerBadgeText:  { fontSize: 10, fontWeight: '700', color: GREEN },
 
-  tipBanner:  { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: '#FFF8F0', borderRadius: 14, padding: 14, marginHorizontal: 16, marginTop: 12, marginBottom: 6, borderWidth: 1, borderColor: '#F5E0C8' },
+  tipBanner:  { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14, marginHorizontal: 16, marginTop: 12, marginBottom: 6 },
   tipIconBox: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FDE9D0', alignItems: 'center', justifyContent: 'center' },
   tipText:    { flex: 1, fontSize: 12, color: DARK, lineHeight: 19 },
 
-  bottomBar:      { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', gap: 12, backgroundColor: CARD, paddingHorizontal: 20, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#E5E1D8', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, elevation: 10 },
-  actionBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: AMBER, borderRadius: 14, height: 52, shadowColor: AMBER, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
-  actionBtnText:  { fontSize: 15, fontWeight: '800', color: '#fff' },
-  actionBtnSmall: { width: 52, height: 52, borderRadius: 14, backgroundColor: CARD, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
+  bottomBar:      { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', gap: 10, backgroundColor: BG, paddingHorizontal: 16, paddingTop: 8 },
+  actionBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: AMBER, borderRadius: 12, height: 44, shadowColor: AMBER, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  actionBtnText:  { fontSize: 13, fontWeight: '800', color: '#fff' },
+  actionBtnSmall: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
 
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  modalCard:         { width: '100%', backgroundColor: CARD, borderRadius: 20, padding: 28, alignItems: 'center', gap: 12 },
+  modalCard:         { width: '100%', backgroundColor: BG, borderRadius: 20, padding: 28, alignItems: 'center', gap: 12 },
   modalIconBox:      { width: 72, height: 72, borderRadius: 36, backgroundColor: '#FEF3E2', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   modalTitle:        { fontSize: 18, fontWeight: '900', color: DARK, textAlign: 'center' },
   modalBody:         { fontSize: 13, color: MUTED, textAlign: 'center', lineHeight: 20 },

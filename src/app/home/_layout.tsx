@@ -51,6 +51,7 @@ export default function HomeLayout() {
       <Tabs.Screen name="product-detail"  options={{ href: null }} />
       <Tabs.Screen name="service-detail"  options={{ href: null }} />
       <Tabs.Screen name="conversation"    options={{ href: null }} />
+      <Tabs.Screen name="chat-profile"    options={{ href: null }} />
       <Tabs.Screen name="search"          options={{ href: null }} />
       <Tabs.Screen name="notifications"   options={{ href: null }} />
       <Tabs.Screen name="menu"            options={{ href: null }} />

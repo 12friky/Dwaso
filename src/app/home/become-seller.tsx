@@ -3,7 +3,7 @@ import { useAuth } from '@/store/authStore';
 import { useEffect, useState } from 'react';
 import {
   StyleSheet, View, Text, ScrollView, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator,
+  TextInput, Alert, ActivityIndicator, Modal, FlatList,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +31,15 @@ const PRODUCT_CATS = [
   'Phones & Tablets','Computers','Kitchen & Dining','Building Materials',
   'Groceries','Sports & Outdoors','Baby Products','Agriculture',
   'Books & Stationery','Other',
+];
+
+// MVP cities only
+const GHANA_TOWNS = [
+  'Accra',
+  'Kumasi',
+  'Takoradi',
+  'Tamale',
+  'Cape Coast',
 ];
 
 // ── Helpers ───────────────────────────────────────────────
@@ -204,10 +213,11 @@ export default function BecomeSellerScreen() {
   const [phoneErr, setPhoneErr] = useState('');
 
   // Step 3 — Location
-  const [town,       setTown]       = useState('');
-  const [townErr,    setTownErr]    = useState('');
-  const [gps,        setGps]        = useState<{ lat: number; lng: number } | null>(null);
-  const [gpsLoading, setGpsLoading] = useState(false);
+  const [town,           setTown]           = useState('');
+  const [townErr,        setTownErr]        = useState('');
+  const [showTownModal,  setShowTownModal]  = useState(false);
+  const [gps,            setGps]            = useState<{ lat: number; lng: number } | null>(null);
+  const [gpsLoading,     setGpsLoading]     = useState(false);
 
   // Step 4
   const [cardNumber,    setCardNumber]    = useState('');
@@ -445,13 +455,73 @@ export default function BecomeSellerScreen() {
             <Text style={styles.stepHeading}>Business Location</Text>
 
             <Label text="Business Town / Area" required />
-            <InputBox
-              value={town}
-              onChangeText={(v) => { setTown(v); setTownErr(''); }}
-              placeholder="e.g. Kumasi, Accra Central, Takoradi"
-              autoCapitalize="words"
-              error={townErr}
-            />
+            <TouchableOpacity
+              style={[styles.inputBox, !!townErr && styles.inputError]}
+              onPress={() => setShowTownModal(true)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="location-outline" size={15} color={MUTED} style={{ marginRight: 8 }} />
+              <Text style={[styles.input, { color: town ? DARK : MUTED }]}>
+                {town || 'Select your town / city…'}
+              </Text>
+              <Ionicons name="chevron-down" size={15} color={MUTED} />
+            </TouchableOpacity>
+            {!!townErr && <Text style={styles.errorText}>{townErr}</Text>}
+
+            {/* Town picker modal */}
+            <Modal
+              visible={showTownModal}
+              animationType="slide"
+              transparent
+              onRequestClose={() => setShowTownModal(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalSheet}>
+                  {/* Handle + title */}
+                  <View style={styles.modalHandle} />
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Select Town / City</Text>
+                    <TouchableOpacity onPress={() => setShowTownModal(false)} hitSlop={8}>
+                      <Ionicons name="close" size={22} color={DARK} />
+                    </TouchableOpacity>
+                  </View>
+                  {/* List */}
+                  <FlatList
+                    data={GHANA_TOWNS}
+                    keyExtractor={(item) => item}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[styles.townItem, town === item && styles.townItemSelected]}
+                        onPress={() => {
+                          setTown(item);
+                          setTownErr('');
+                          setShowTownModal(false);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons
+                          name="location-outline"
+                          size={14}
+                          color={town === item ? AMBER : MUTED}
+                          style={{ marginRight: 10 }}
+                        />
+                        <Text style={[styles.townItemText, town === item && styles.townItemTextSelected]}>
+                          {item}
+                        </Text>
+                        {town === item && <Ionicons name="checkmark" size={15} color={AMBER} />}
+                      </TouchableOpacity>
+                    )}
+                    ListEmptyComponent={
+                      <View style={{ alignItems: 'center', paddingTop: 40 }}>
+                        <Text style={{ color: MUTED, fontSize: 13 }}>No towns found</Text>
+                      </View>
+                    }
+                  />
+                </View>
+              </View>
+            </Modal>
 
             <Label text="GPS Coordinates" required />
             <TouchableOpacity style={styles.gpsBtn} onPress={captureGPS} activeOpacity={0.85} disabled={gpsLoading}>
@@ -592,7 +662,7 @@ const styles = StyleSheet.create({
   stepHeading: { fontSize: 18, fontWeight: '800', color: DARK, marginBottom: 20 },
   label: { fontSize: 12, fontWeight: '700', color: DARK, marginBottom: 8, marginTop: 16 },
 
-  inputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: CARD, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: '#E5E1D8' },
+  inputBox: { flexDirection: 'row', alignItems: 'center', height: 44, backgroundColor: CARD, borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#E5E1D8' },
   inputError: { borderColor: RED },
   input: { flex: 1, fontSize: 13, color: DARK },
   errorText: { fontSize: 11, color: RED, marginTop: 4 },
@@ -640,4 +710,16 @@ const styles = StyleSheet.create({
   pendingText: { fontSize: 12, fontWeight: '700', color: AMBER },
   successBtn: { backgroundColor: AMBER, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 40, marginTop: 8, shadowColor: AMBER, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
   successBtnText: { fontSize: 14, fontWeight: '800', color: '#fff' },
+
+  // ── Town picker modal ──
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalSheet:   { backgroundColor: CARD, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%', paddingBottom: 32 },
+  modalHandle:  { width: 40, height: 4, borderRadius: 2, backgroundColor: CATBG, alignSelf: 'center', marginTop: 10, marginBottom: 8 },
+  modalHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12 },
+  modalTitle:   { fontSize: 16, fontWeight: '800', color: DARK },
+  modalSearch:  { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 8, backgroundColor: CATBG, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  townItem:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: CATBG },
+  townItemSelected: { backgroundColor: '#FFF8F0' },
+  townItemText:     { flex: 1, fontSize: 13, color: DARK },
+  townItemTextSelected: { color: AMBER, fontWeight: '700' },
 });

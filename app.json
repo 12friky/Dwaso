@@ -1,30 +1,47 @@
 {
   "expo": {
-    "name": "dwaso",
+    "name": "Dwaso",
     "slug": "dwaso",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "dwaso",
     "userInterfaceStyle": "automatic",
+
     "ios": {
       "icon": "./assets/expo.icon"
     },
+
     "android": {
+      "package": "com.francis101.dwaso",
+
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+
+      "predictiveBackGestureEnabled": false,
+
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+
+      "googleServicesFile": "./google-services.json"
     },
+
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+
     "plugins": [
       "expo-router",
+
       [
         "expo-splash-screen",
         {
@@ -33,11 +50,41 @@
           "imageWidth": 76
         }
       ],
-      "expo-audio"
+
+      "expo-audio",
+
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Dwaso to access your location to connect you with nearby sellers and services."
+        }
+      ],
+
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#E8943A",
+          "sounds": [
+            "./assets/sounds/message tone.mp3"
+          ]
+        }
+      ]
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+
+    "extra": {
+      "router": {},
+
+      "eas": {
+        "projectId": "7dcf697b-05dc-45a6-b83b-30e9249c00a7"
+      }
+    },
+
+    "owner": "francis101"
   }
 }

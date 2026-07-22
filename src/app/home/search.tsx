@@ -284,15 +284,15 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
 
   header: {
-    paddingHorizontal: 40, paddingVertical: 10,
+    paddingHorizontal: 20, paddingVertical: 8,
   },
   searchBar: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: CARD, borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 0,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+    height: 34, backgroundColor: CARD, borderRadius: 17,
+    paddingHorizontal: 12, borderWidth: 1, borderColor: '#E5E1D8',
+    shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 3, elevation: 1,
   },
-  searchInput: { flex: 1, fontSize: 12, color: DARK, height: 36 },
+  searchInput: { flex: 1, fontSize: 12, color: DARK, height: 34 },
 
   scroll: { paddingHorizontal: 16 },
 
@@ -313,18 +313,18 @@ const styles = StyleSheet.create({
   },
   recentText: { fontSize: 12, color: DARK },
 
-  trendGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  trendGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   trendCard: {
-    width: (SCREEN_W - 32 - 20) / 3,
-    backgroundColor: CARD, borderRadius: 14,
-    paddingVertical: 14, alignItems: 'center', gap: 8,
+    width: (SCREEN_W - 32 - 24) / 4,
+    minHeight: 76, backgroundColor: CARD, borderRadius: 12,
+    paddingVertical: 9, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', gap: 5,
     shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
   trendIconBox: {
-    width: 42, height: 42, borderRadius: 21,
+    width: 34, height: 34, borderRadius: 17,
     backgroundColor: '#FEF3E2', alignItems: 'center', justifyContent: 'center',
   },
-  trendLabel: { fontSize: 11, fontWeight: '600', color: DARK },
+  trendLabel: { fontSize: 10, fontWeight: '600', color: DARK, textAlign: 'center' },
 
   loadingBox:   { alignItems: 'center', paddingVertical: 24, gap: 8, flexDirection: 'row', justifyContent: 'center' },
   loadingText:  { fontSize: 13, color: MUTED },

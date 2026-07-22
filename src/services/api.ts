@@ -6,9 +6,21 @@
  * e.g. 'http://192.168.191.77:5000'
  * 
  */
-export const BASE_URL = 'http://192.168.191.77:5000';
+export const BASE_URL = 'http://192.168.36.77:5000';
+
 const API_URL = `${BASE_URL}/api`;
  
+async function parseApiResponse<T>(res: Response): Promise<T> {
+  let json: any;
+  try {
+    json = await res.json();
+  } catch {
+    throw { success: false, message: 'Server returned an invalid response.' } as ApiError;
+  }
+
+  if (!res.ok) throw json as ApiError;
+  return json as T;
+}
 
 // ─── Types ────────────────────────────
 
@@ -28,6 +40,8 @@ export interface User {
   location?: string | null;
   bio?: string | null;
   addresses?: Address[];
+  lat?: number | null;
+  lng?: number | null;
   role: string;
   isVerified: boolean;
   createdAt: string;
@@ -40,6 +54,14 @@ export interface AuthResponse {
     user: User;
     accessToken: string;
     refreshToken: string;
+  };
+}
+
+export interface SignupResponse {
+  success: boolean;
+  message: string;
+  data: {
+    phone: string;
   };
 }
 
@@ -60,7 +82,7 @@ export interface SignupPayload {
   avatarUri?: string | null;
 }
 
-export async function signupApi(payload: SignupPayload): Promise<AuthResponse> {
+export async function signupApi(payload: SignupPayload): Promise<SignupResponse> {
   const form = new FormData();
 
   form.append('fullName', payload.fullName);
@@ -76,15 +98,18 @@ export async function signupApi(payload: SignupPayload): Promise<AuthResponse> {
     form.append('profilePicture', { uri: payload.avatarUri, name: filename, type } as any);
   }
 
-  const res = await fetch(`${API_URL}/auth/signup`, {
-    method: 'POST',
-    body: form,
-    // Do NOT set Content-Type — fetch sets it automatically with the boundary
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/auth/signup`, {
+      method: 'POST',
+      body: form,
+      // Do NOT set Content-Type — fetch sets it automatically with the boundary
+    });
+  } catch (err: any) {
+    throw { success: false, message: err?.message ?? 'Network error during signup.' } as ApiError;
+  }
 
-  const json = await res.json();
-  if (!res.ok) throw json as ApiError;
-  return json as AuthResponse;
+  return parseApiResponse<SignupResponse>(res);
 }
 
 // ─── Login ────────────────────────────────────────────────────────────────────
@@ -137,6 +162,7 @@ export interface Post {
   workersNeeded?: number | null;
   location: string;
   images: string[];
+  showInFeed: boolean;
   status: 'open' | 'closed' | 'fulfilled';
   createdAt: string;
 }
@@ -146,7 +172,7 @@ export interface CreatePostPayload {
   category: string;
   serviceType?: string;
   title?: string;
-  description: string;
+  description?: string;
   budget?: string;
   budgetType?: string;
   deliveryRequired?: string;
@@ -168,6 +194,10 @@ export interface CreatePostPayload {
   preferredTime?: string;
   estimatedDuration?: string;
   workersNeeded?: string;
+  showInFeed?: boolean;
+  /** Buyer's GPS coordinates — used for distance-based seller matching */
+  lat?: number;
+  lng?: number;
 }
 
 export async function createPostApi(
@@ -177,7 +207,7 @@ export async function createPostApi(
   const form = new FormData();
 
   form.append('category',    payload.category);
-  form.append('description', payload.description);
+  if (payload.description) form.append('description', payload.description);
   form.append('location',    payload.location);
   if (payload.serviceType) form.append('serviceType', payload.serviceType);
   if (payload.title)       form.append('title',       payload.title);
@@ -201,6 +231,9 @@ export async function createPostApi(
   if (payload.preferredTime) form.append('preferredTime', payload.preferredTime);
   if (payload.estimatedDuration) form.append('estimatedDuration', payload.estimatedDuration);
   if (payload.workersNeeded) form.append('workersNeeded', payload.workersNeeded);
+  form.append('showInFeed', String(payload.showInFeed ?? true));
+  if (payload.lat != null) form.append('lat', String(payload.lat));
+  if (payload.lng != null) form.append('lng', String(payload.lng));
 
   (payload.imageUris ?? []).forEach((uri) => {
     const filename = uri.split('/').pop() ?? 'photo.jpg';
@@ -281,9 +314,13 @@ export async function updatePostApi(
 // ─── Fetch single post ────────────────────────────────────────────────────────
 
 export async function getPostByIdApi(
-  id: string
+  id: string,
+  accessToken?: string
 ): Promise<{ success: boolean; data: { post: Post } }> {
-  const res  = await fetch(`${API_URL}/posts/${id}`);
+  const headers: Record<string, string> = {};
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+  const res  = await fetch(`${API_URL}/posts/${id}`, { headers });
   const json = await res.json();
   if (!res.ok) throw json as ApiError;
   return json;
@@ -362,9 +399,38 @@ export interface ChatUser {
   phone?: string;
 }
 
+export interface ChatProfile extends ChatUser {
+  location: string;
+  bio: string;
+  role: 'buyer' | 'seller' | 'admin';
+  createdAt: string;
+}
+
+export interface ChatRequestSummary {
+  _id: string;
+  title: string | null;
+  description: string;
+  category: string;
+  location: string;
+  contactPreference: string | null;
+}
+
+export async function getUserProfileApi(
+  userId: string,
+  accessToken: string,
+  conversationId: string
+): Promise<{ success: boolean; data: { user: ChatProfile; request: ChatRequestSummary } }> {
+  const res = await fetch(`${API_URL}/auth/users/${userId}?conversationId=${encodeURIComponent(conversationId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const json = await res.json();
+  if (!res.ok) throw json as ApiError;
+  return json;
+}
+
 export interface Conversation {
   _id: string;
-  post: { _id: string; title: string | null; description: string; category: string; images: string[] };
+  post: { _id: string; title: string | null; description: string; category: string; images: string[]; contactPreference?: string | null };
   buyer:  ChatUser;
   seller: ChatUser;
   lastMessage: string;
@@ -450,6 +516,8 @@ export interface UpdateProfilePayload {
   bio?: string | null;
   addresses?: Address[];
   avatarUri?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export async function getMeApi(
@@ -480,6 +548,8 @@ export async function updateProfileApi(
     if (payload.location !== undefined) form.append('location', payload.location);
     if (payload.bio !== undefined) form.append('bio', payload.bio);
     if (payload.addresses) form.append('addresses', JSON.stringify(payload.addresses));
+    if (payload.lat !== undefined && payload.lat !== null) form.append('lat', String(payload.lat));
+    if (payload.lng !== undefined && payload.lng !== null) form.append('lng', String(payload.lng));
 
     const filename = payload.avatarUri?.split('/').pop() ?? 'profile.jpg';
     const match    = /\.(\w+)$/.exec(filename);
@@ -622,6 +692,105 @@ export async function savePushTokenApi(
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ token }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw json as ApiError;
+  return json;
+}
+
+// ─── OTP ──────────────────────────────────────────────────────────────────────
+
+export interface OtpSendResponse {
+  success: boolean;
+  message: string;
+  requestId: string;
+  prefix: string;
+}
+
+export async function sendOtpApi(phone: string): Promise<OtpSendResponse> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/auth/send-otp`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ phone }),
+    });
+  } catch (err: any) {
+    throw { success: false, message: err?.message ?? 'Network error while sending OTP.' } as ApiError;
+  }
+  return parseApiResponse<OtpSendResponse>(res);
+}
+
+export async function verifyOtpApi(params: {
+  phone: string;
+  requestId: string;
+  prefix: string;
+  code: string;
+}): Promise<AuthResponse> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/auth/verify-otp`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(params),
+    });
+  } catch (err: any) {
+    throw { success: false, message: err?.message ?? 'Network error while verifying OTP.' } as ApiError;
+  }
+
+  return parseApiResponse<AuthResponse>(res);
+}
+
+export async function resendOtpApi(requestId: string): Promise<OtpSendResponse> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/auth/resend-otp`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ requestId }),
+    });
+  } catch (err: any) {
+    throw { success: false, message: err?.message ?? 'Network error while resending OTP.' } as ApiError;
+  }
+
+  return parseApiResponse<OtpSendResponse>(res);
+}
+
+// ─── Forgot / Reset Password ──────────────────────────────────────────────────
+
+export async function forgotPasswordApi(phone: string): Promise<OtpSendResponse> {
+  const res  = await fetch(`${API_URL}/auth/forgot-password`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ phone }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw json as ApiError;
+  return json;
+}
+
+export async function resetPasswordApi(params: {
+  phone: string;
+  requestId: string;
+  prefix: string;
+  code: string;
+  newPassword: string;
+}): Promise<{ success: boolean; message: string }> {
+  const res  = await fetch(`${API_URL}/auth/reset-password`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(params),
+  });
+  const json = await res.json();
+  if (!res.ok) throw json as ApiError;
+  return json;
+}
+
+export async function resendResetOtpApi(requestId: string): Promise<OtpSendResponse> {
+  const res  = await fetch(`${API_URL}/auth/resend-reset-otp`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ requestId }),
   });
   const json = await res.json();
   if (!res.ok) throw json as ApiError;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  StyleSheet, View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, View, Text, ScrollView, TouchableOpacity, Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +24,7 @@ export default function MyRequestsScreen() {
   const [tab, setTab] = useState(0);
   const [requests, setRequests] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -49,15 +50,21 @@ export default function MyRequestsScreen() {
   const isServiceRequest = (req: Post) =>
     req.requestType === 'service' || Boolean(req.serviceType) || req.category === 'Services';
 
-  const toggleClose = async (id: string) => {
+  const toggleRequestStatus = async (request: Post) => {
     if (!accessToken) return;
+    const nextStatus = request.status === 'open' ? 'closed' : 'open';
+    const action = nextStatus === 'open' ? 'reopen' : 'close';
+    setUpdatingId(request._id);
     try {
-      const res = await updatePostApi(id, { status: 'closed' }, accessToken);
+      const res = await updatePostApi(request._id, { status: nextStatus }, accessToken);
       setRequests((prev) => prev.map((req) =>
-        req._id === id ? res.data.post : req
+        req._id === request._id ? res.data.post : req
       ));
     } catch (err) {
-      console.warn('Failed to close request', err);
+      console.warn(`Failed to ${action} request`, err);
+      Alert.alert('Could not update request', `We could not ${action} this request. Please try again.`);
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -126,11 +133,16 @@ export default function MyRequestsScreen() {
                     <Text style={styles.viewRequestBtnText}>View Request</Text>
                     <Ionicons name="arrow-forward" size={13} color={AMBER} />
                   </TouchableOpacity>
-                  {req.status === 'open' && (
-                    <TouchableOpacity style={styles.closeRequestBtn} activeOpacity={0.85} onPress={() => toggleClose(req._id)}>
-                      <Text style={styles.closeRequestText}>Close Request</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    style={[styles.closeRequestBtn, req.status === 'closed' && styles.openRequestBtn]}
+                    activeOpacity={0.85}
+                    onPress={() => toggleRequestStatus(req)}
+                    disabled={updatingId === req._id}
+                  >
+                    <Text style={[styles.closeRequestText, req.status === 'closed' && styles.openRequestText]}>
+                      {updatingId === req._id ? 'Updating…' : req.status === 'open' ? 'Close Request' : 'Open Request'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             ))}
@@ -170,6 +182,8 @@ const styles = StyleSheet.create({
   viewRequestBtnText: { fontSize: 12, fontWeight: '700', color: AMBER },
   closeRequestBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F5F5', borderRadius: 10, paddingVertical: 9 },
   closeRequestText: { fontSize: 12, fontWeight: '700', color: DARK },
+  openRequestBtn: { backgroundColor: '#E8F4EC' },
+  openRequestText: { color: '#2E7D52' },
   empty: { alignItems: 'center', paddingTop: 60, gap: 10 },
   emptyIcon: { width: 68, height: 68, borderRadius: 34, backgroundColor: '#FEF3E2', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   emptyTitle: { fontSize: 15, fontWeight: '700', color: DARK },

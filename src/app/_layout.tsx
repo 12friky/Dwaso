@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  Animated, TouchableOpacity, View, Text, StyleSheet,
+  Animated, TouchableOpacity, View, Text, StyleSheet, Platform,
 } from 'react-native';
 import { Slot, useRouter }        from 'expo-router';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,8 +19,22 @@ import { NotificationProvider, useNotifications } from '../store/notificationSto
 import Ionicons                   from '@expo/vector-icons/Ionicons';
 import * as Haptics               from 'expo-haptics';
 import { useAudioPlayer }         from 'expo-audio';
+import * as Notifications         from 'expo-notifications';
+import * as Device                from 'expo-device';
+import Constants                  from 'expo-constants';
 import SocketService              from '../services/socket';
-import { getMyConversationsApi, type AppNotification } from '../services/api';
+import { getMyConversationsApi, savePushTokenApi, type AppNotification } from '../services/api';
+
+// ── Configure how notifications behave when app is foregrounded ───────────────
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert:   false, // we show our own banner
+    shouldPlaySound:   false, // we play our own sound
+    shouldSetBadge:    true,
+    shouldShowBanner:  false,
+    shouldShowList:    true,
+  }),
+});
 
 // ── In-app notification banner ────────────────────────────────────────────────
 const BANNER_DURATION = 4000; // ms before auto-dismiss
@@ -117,13 +131,63 @@ const bannerStyles = StyleSheet.create({
   closeBtn: { paddingLeft: 4 },
 });
 
-// ── AppBridge — socket/notification/sound logic ───────────────────────────────
+// ── Register device for push notifications ────────────────────────────────────
+async function registerForPushNotifications(): Promise<string | null> {
+  // Push notifications only work on physical devices
+  if (!Device.isDevice) {
+    console.log('[Push] Skipping — not a physical device');
+    return null;
+  }
+
+  // Check / request permission
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+
+  if (finalStatus !== 'granted') {
+    console.log('[Push] Permission not granted');
+    return null;
+  }
+
+  // Android needs a notification channel
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name:        'Default',
+      importance:  Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor:  '#E8943A',
+      sound:       'message tone.mp3',
+    });
+  }
+
+  // Get the Expo push token
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+  if (!projectId) {
+    console.error('[Push] No projectId found in app.json');
+    return null;
+  }
+
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    console.log('[Push] Expo push token:', tokenData.data);
+    return tokenData.data;
+  } catch (err) {
+    console.warn('[Push] Failed to fetch Expo token:', err);
+    return null;
+  }
+}
+
+// ── AppBridge — socket/notification/sound/push logic ─────────────────────────
 function AppBridge() {
   const router = useRouter();
   const { state: { accessToken, user } } = useAuth();
   const { setTotalUnread }               = useUnread();
   const { loadSaved }                    = useSaved();
-  const { loadNotifications, prependNotif } = useNotifications();
+  const { state: notificationState, loadNotifications, prependNotif, reset: resetNotifications } = useNotifications();
 
   const [bannerNotif, setBannerNotif] = useState<AppNotification | null>(null);
 
@@ -155,14 +219,23 @@ function AppBridge() {
   }, [router]);
 
   useEffect(() => {
-    if (!accessToken) {
+    Notifications.setBadgeCountAsync(accessToken ? notificationState.unreadCount : 0).catch(() => {});
+  }, [accessToken, notificationState.unreadCount]);
+
+  useEffect(() => {
+    if (!accessToken || !user?.isVerified) {
       SocketService.disconnect();
       setTotalUnread(0);
+      resetNotifications();
       return;
     }
 
     // 1. Connect socket
     SocketService.connect(accessToken);
+
+    // Do not let notifications from a previously signed-in account remain on
+    // screen while this account's request is in flight.
+    resetNotifications();
 
     // 2. Load saved posts
     loadSaved(accessToken);
@@ -170,11 +243,45 @@ function AppBridge() {
     // 3. Load existing notifications (no sound — these are old)
     loadNotifications(accessToken);
 
-    // 4. Real-time new notification → sound + vibration + banner
+    // 4. Register for push notifications & save token to backend
+    registerForPushNotifications()
+      .then((token) => {
+        if (token) {
+          savePushTokenApi(token, accessToken).catch(() => {});
+        }
+      })
+      .catch((err) => {
+        console.warn('[Push] registration failed', err);
+      });
+
+    // 5. Handle tap on a push notification (app was background/killed)
+    const tapSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as any;
+      if (data?.conversationId) {
+        router.push({ pathname: '/home/conversation', params: { id: data.conversationId } });
+      } else if (data?.postId) {
+        const isService = data?.requestType === 'service';
+        router.push({
+          pathname: isService ? '/home/service-detail' : '/home/product-detail',
+          params: { id: data.postId, from: '/home/notifications' },
+        });
+      } else {
+        router.push('/home/notifications');
+      }
+    });
+
+    // 6. Real-time new notification → sound + vibration + banner
     const unsubNotif = SocketService.on('new_notification', (notif: AppNotification) => {
       prependNotif(notif);    // update store + badge
       playAlert();            // sound + vibration
       setBannerNotif(notif);  // show banner
+    });
+
+    // Chat alerts are banner/push-only; they deliberately do not enter the
+    // notification store or the Notifications screen.
+    const unsubChatAlert = SocketService.on('new_chat_alert', (notif: AppNotification) => {
+      playAlert();
+      setBannerNotif(notif);
     });
 
     // 5. Fetch unread chat count
@@ -218,8 +325,10 @@ function AppBridge() {
 
     return () => {
       unsubNotif();
+      unsubChatAlert();
       unsubUpdated();
       unsubRead();
+      tapSub.remove();
     };
   }, [accessToken, user?._id]);
 

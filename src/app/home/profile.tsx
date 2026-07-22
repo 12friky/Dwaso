@@ -7,22 +7,20 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../store/authStore';
-import { getMeApi } from '../../services/api';
+import { getMeApi, getMyPostsApi, getSavedApi } from '../../services/api';
 
 // ── Palette ───────────────────────────────────────────────
-const BG    = '#F2EFE6';
-const CARD  = '#FFFFFF';
+const BG    = '#FFFFFF';
 
 const DARK  = '#1B3A2D';
 const AMBER = '#E8943A';
 const MUTED = '#9CA3AF';
-const CATBG = '#EDEAE1';
+const CATBG = '#F3F4F1';
 const GREEN  = '#2E7D52';
 
 const ACCOUNT_ITEMS = [
   { icon: 'person-outline'           as const, label: 'Edit Profile',    route: '/home/edit-profile'    },
   { icon: 'location-outline'         as const, label: 'Saved Addresses', route: '/home/saved-addresses' },
-  { icon: 'shield-checkmark-outline' as const, label: 'Verify Account',  route: null, badge: 'Verify'  },
 ];
 
 const ACTIVITY_ITEMS = [
@@ -83,16 +81,26 @@ export default function ProfileScreen() {
   const { state: { user, accessToken }, clearUser, updateUser } = useAuth();
   const [notificationsOn, setNotificationsOn] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [requestCount, setRequestCount] = useState(0);
+  const [savedCount, setSavedCount] = useState(0);
 
   const stats = [
-    { label: 'Requests', value: String(user?.requestCount ?? 0) },
-    { label: 'Offers', value: String(user?.offerCount ?? 0) },
-    { label: 'Saved', value: String(user?.savedCount ?? 0) },
+    { label: 'Requests', value: String(requestCount) },
+    { label: 'Saved', value: String(savedCount) },
   ];
 
   const fetchUser = useCallback(async () => {
     if (!accessToken) return;
-    try { const res = await getMeApi(accessToken); updateUser(res.data.user); } catch { /* non-fatal */ }
+    try {
+      const [userRes, postsRes, savedRes] = await Promise.all([
+        getMeApi(accessToken),
+        getMyPostsApi(accessToken),
+        getSavedApi(accessToken),
+      ]);
+      updateUser(userRes.data.user);
+      setRequestCount(postsRes.data.posts.length);
+      setSavedCount(savedRes.data.posts.length);
+    } catch { /* non-fatal */ }
   }, [accessToken, updateUser]);
 
   const onRefresh = useCallback(async () => {
@@ -156,13 +164,6 @@ export default function ProfileScreen() {
           <Text style={styles.profileName}>{user?.fullName ?? '—'}</Text>
           <Text style={styles.profileEmail}>{user?.email ?? user?.phone ?? '—'}</Text>
 
-          {user?.isVerified && (
-            <View style={styles.verifiedRow}>
-              <Ionicons name="shield-checkmark" size={13} color={GREEN} />
-              <Text style={styles.verifiedText}>Verified Member</Text>
-            </View>
-          )}
-
           <View style={styles.locationRow}>
             <Ionicons name="call-outline" size={12} color={MUTED} />
             <Text style={styles.locationText}>+233 {user?.phone ?? '—'}</Text>
@@ -171,7 +172,7 @@ export default function ProfileScreen() {
           {user?.role === 'seller' ? (
             <View style={[styles.sellerBadge, styles.sellerBadgeSeller]}>
               <Ionicons name="checkmark-circle-outline" size={14} color={GREEN} />
-              <Text style={[styles.sellerBadgeText, styles.sellerBadgeSellerText]}>Already a Seller</Text>
+              <Text style={[styles.sellerBadgeText, styles.sellerBadgeSellerText]}>Verified Seller</Text>
             </View>
           ) : (
             <TouchableOpacity
@@ -218,7 +219,6 @@ export default function ProfileScreen() {
               <MenuItem
                 icon={item.icon}
                 label={item.label}
-                badge={item.badge}
                 onPress={item.route ? () => router.push(item.route as any) : undefined}
               />
               {i < ACCOUNT_ITEMS.length - 1 && <View style={styles.menuDivider} />}
@@ -246,7 +246,7 @@ export default function ProfileScreen() {
                 value={notificationsOn}
                 onValueChange={setNotificationsOn}
                 trackColor={{ false: CATBG, true: AMBER }}
-                thumbColor={CARD}
+                thumbColor={BG}
                 ios_backgroundColor={CATBG}
                 style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
               />
@@ -287,17 +287,15 @@ const styles = StyleSheet.create({
   settingsBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: CATBG, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 20, paddingTop: 4 },
 
-  profileCard: { backgroundColor: CARD, borderRadius: 20, padding: 20, alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: CATBG},
+  profileCard: { backgroundColor: BG, borderRadius: 20, padding: 20, alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: CATBG},
   avatarWrap: { position: 'relative', marginBottom: 12 },
   avatarImg: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: AMBER },
   avatarCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: AMBER, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: BG },
   avatarInitial: { fontSize: 34, fontWeight: '800', color: '#fff' },
-  editAvatarBtn: { position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: 13, backgroundColor: AMBER, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: CARD },
+  editAvatarBtn: { position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: 13, backgroundColor: AMBER, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BG },
 
   profileName: { fontSize: 18, fontWeight: '800', color: DARK, marginBottom: 3 },
   profileEmail: { fontSize: 12, color: MUTED, marginBottom: 8 },
-  verifiedRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
-  verifiedText: { fontSize: 11, fontWeight: '700', color: GREEN },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 14 },
   locationText: { fontSize: 11, color: MUTED },
   sellerBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FEF3E2', borderRadius: 20, borderWidth: 1, borderColor: '#F5E0C8', paddingHorizontal: 16, paddingVertical: 8 },
@@ -306,11 +304,11 @@ const styles = StyleSheet.create({
   sellerBadgeSellerText: { color: GREEN },
 
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  statCard: { flex: 1, backgroundColor: CARD, borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: CATBG },
+  statCard: { flex: 1, backgroundColor: BG, borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: CATBG },
   statValue: { fontSize: 16, fontWeight: '800', color: DARK, marginBottom: 3 },
   statLabel: { fontSize: 10, color: MUTED, fontWeight: '600' },
 
-  quickRow: { flexDirection: 'row', backgroundColor: CARD, borderRadius: 16, paddingVertical: 14, marginBottom: 20, borderWidth: 1, borderColor: CATBG },
+  quickRow: { flexDirection: 'row', backgroundColor: BG, borderRadius: 16, paddingVertical: 14, marginBottom: 20, borderWidth: 1, borderColor: CATBG },
   quickItem: { flex: 1, alignItems: 'center', gap: 6 },
   quickItemBorder: { borderRightWidth: 1, borderRightColor: '#EEEBE3' },
   quickIconBox: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
@@ -318,7 +316,7 @@ const styles = StyleSheet.create({
 
   menuSection: { marginBottom: 16 },
   menuSectionTitle: { fontSize: 11, fontWeight: '700', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 },
-  menuCard: { backgroundColor: CARD, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: CATBG },
+  menuCard: { backgroundColor: BG, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: CATBG },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 },
   menuIconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: CATBG, alignItems: 'center', justifyContent: 'center' },
   menuLabel: { flex: 1, fontSize: 13, fontWeight: '500', color: DARK },
@@ -327,7 +325,7 @@ const styles = StyleSheet.create({
   menuBadgeText: { fontSize: 10, fontWeight: '700', color: AMBER },
   menuDivider: { height: 1, backgroundColor: CATBG, marginLeft: 62 },
 
-  signOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: CARD, borderRadius: 16, paddingVertical: 14, marginBottom: 12, borderWidth: 1, borderColor: CATBG },
+  signOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: BG, borderRadius: 16, paddingVertical: 14, marginBottom: 12, borderWidth: 1, borderColor: CATBG },
   signOutText: { fontSize: 13, fontWeight: '700', color: '#E53935' },
   version: { textAlign: 'center', fontSize: 11, color: MUTED, marginBottom: 8 },
 });

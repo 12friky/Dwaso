@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Image,
   Animated,
+  Alert,
+  Linking,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Location from 'expo-location';
@@ -15,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../store/authStore';
 import { useNotifications } from '../../store/notificationStore';
 import { getPostsApi, type Post as ApiPost } from '../../services/api';
+import { requestAndSaveUserLocation } from '../../services/userLocation';
 
 const BG    = '#F2EFE6';
 const CARD  = '#FFFFFF';
@@ -25,12 +28,12 @@ const CATBG = '#EDEAE1';
 const CARD_W = '47%' as const;
 
 const CATEGORIES = [
-  { label: 'Electronics', icon: 'phone-portrait-outline' as const, browsecat: 'Electronics', isService: false },
-  { label: 'Fashion',     icon: 'shirt-outline'          as const, browsecat: 'Fashion',     isService: false },
-  { label: 'Home',        icon: 'home-outline'           as const, browsecat: 'Home',        isService: false },
-  { label: 'Vehicles',    icon: 'car-outline'            as const, browsecat: 'Vehicles',    isService: false },
-  { label: 'Services',    icon: 'construct-outline'      as const, browsecat: 'Services',    isService: true  },
-  { label: 'More',        icon: 'grid-outline'           as const, browsecat: 'All',         isService: false },
+  { label: 'Electronics', icon: 'phone-portrait-outline' as const, browsecat: 'Electronics' },
+  { label: 'Fashion',     icon: 'shirt-outline'          as const, browsecat: 'Fashion'     },
+  { label: 'Home',        icon: 'home-outline'           as const, browsecat: 'Home'        },
+  { label: 'Vehicles',    icon: 'car-outline'            as const, browsecat: 'Vehicles'    },
+  { label: 'Services',    icon: 'construct-outline'      as const, browsecat: 'Services'    },
+  { label: 'More',        icon: 'grid-outline'           as const, browsecat: 'All'         },
 ];
 
 // previously dummy live requests; now loaded from API
@@ -94,26 +97,73 @@ function CatItem({ label, icon, shakeRef, onPress }: {
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { state: { user } } = useAuth();
-  const { state: { unreadCount: notifUnread } } = useNotifications();
+  const { state: notificationState } = useNotifications();
+  const { state: { user, accessToken }, updateUser } = useAuth();
 
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const firstName = user?.fullName?.split(' ')[0] ?? 'there';
+  const locationPromptShownForUser = useRef<string | null>(null);
+  const [locationSaving, setLocationSaving] = useState(false);
 
-  const [locationAsked, setLocationAsked] = useState(false);
+  const saveLocation = async () => {
+    if (!user || !accessToken || locationSaving) return;
+
+    try {
+      setLocationSaving(true);
+      const result = await requestAndSaveUserLocation(user, accessToken, updateUser);
+      if (!result.saved) {
+        Alert.alert(
+          'We could not save your location',
+          result.reason ?? 'Please try again.',
+          result.canAskAgain
+            ? [
+                { text: 'Not now', style: 'cancel' },
+                { text: 'Try again', onPress: () => { void saveLocation(); } },
+              ]
+            : [
+                { text: 'Not now', style: 'cancel' },
+                { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
+              ],
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        'We could not save your location',
+        'Please check your internet connection and try again.',
+        [{ text: 'OK' }],
+      );
+    } finally {
+      setLocationSaving(false);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      if (status !== 'granted') setLocationAsked(true);
-    })();
-  }, []);
+    if (
+      !user || !accessToken || user.lat != null || user.lng != null
+      || locationPromptShownForUser.current === user._id
+    ) return;
+    locationPromptShownForUser.current = user._id;
 
-  const requestLocation = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status === 'granted') setLocationAsked(false);
-  };
+    Location.getForegroundPermissionsAsync()
+      .then((permission) => {
+        console.log('Permission Status:', permission.status);
+        if (permission.status === 'granted') {
+          void saveLocation();
+          return;
+        }
+
+        Alert.alert(
+          'Enable Location',
+          'Allow Dwaso to access your location to connect you with nearby sellers and services.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Allow', onPress: () => { void saveLocation(); } },
+          ],
+        );
+      })
+      .catch((error) => console.error('Location Error:', error));
+  }, [user, accessToken]);
 
   const shakeFns = useRef<Record<number, () => void>>({});
   const lastIdx  = useRef<number>(-1);
@@ -168,9 +218,11 @@ export default function FeedScreen() {
         <Text style={styles.appTitle}>Dwaso</Text>
         <TouchableOpacity style={styles.bellWrap} hitSlop={8} onPress={() => router.push('/home/notifications')}>
           <Ionicons name="notifications-outline" size={24} color={DARK} />
-          {notifUnread > 0 && (
+          {notificationState.unreadCount > 0 && (
             <View style={styles.bellBadge}>
-              <Text style={styles.bellBadgeText}>{notifUnread > 99 ? '99+' : notifUnread}</Text>
+              <Text style={styles.bellBadgeText}>
+                {notificationState.unreadCount > 99 ? '99+' : notificationState.unreadCount}
+              </Text>
             </View>
           )}
         </TouchableOpacity>
@@ -182,23 +234,6 @@ export default function FeedScreen() {
         <View style={styles.greetRow}>
           <Text style={styles.greetSub}>{greeting}, {firstName} 👋</Text>
         </View>
-
-        {/* ── Location permission banner ── */}
-        {locationAsked && (
-          <TouchableOpacity style={styles.locationBanner} onPress={requestLocation} activeOpacity={0.88}>
-            <View style={styles.locationBannerIcon}>
-              <Ionicons name="location-outline" size={20} color={AMBER} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.locationBannerTitle}>Enable Location</Text>
-              <Text style={styles.locationBannerSub}>Find sellers and requests near you</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={AMBER} />
-            <TouchableOpacity onPress={() => setLocationAsked(false)} hitSlop={8} style={{ padding: 4 }}>
-              <Ionicons name="close" size={16} color={MUTED} />
-            </TouchableOpacity>
-          </TouchableOpacity>
-        )}
 
         {/* ── Banner ── */}
         <View style={styles.bannerWrapper}>
@@ -259,13 +294,7 @@ export default function FeedScreen() {
             <CatItem
               key={cat.label} label={cat.label} icon={cat.icon}
               shakeRef={makeShakeRef(i)}
-              onPress={() => {
-                if (cat.isService) {
-                  router.push('/home/services');
-                } else {
-                  router.push({ pathname: '/home/browse', params: { cat: cat.browsecat } });
-                }
-              }}
+              onPress={() => router.push({ pathname: '/home/browse', params: { cat: cat.browsecat } })}
             />
           ))}
         </View>
@@ -355,12 +384,6 @@ const styles = StyleSheet.create({
   scroll: { paddingBottom: 48 },
   greetRow: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 12 },
   greetSub: { fontSize: 11, color: MUTED },
-
-  // Location banner
-  locationBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 12, backgroundColor: '#FFF8F0', borderRadius: 14, padding: 12, gap: 10, borderWidth: 1, borderColor: '#F5E0C8' },
-  locationBannerIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#FDE9D0', alignItems: 'center', justifyContent: 'center' },
-  locationBannerTitle: { fontSize: 12, fontWeight: '700', color: DARK, marginBottom: 2 },
-  locationBannerSub: { fontSize: 10, color: MUTED },
 
   bannerWrapper: { marginBottom: 16 },
   bannerImage: { width: '100%', height: 130 },

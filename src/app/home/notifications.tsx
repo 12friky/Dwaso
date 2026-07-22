@@ -96,7 +96,7 @@ export default function NotificationsScreen() {
       // Fetch the post to determine if it's a product or service
       try {
         const { getPostByIdApi } = await import('../../services/api');
-        const res = await getPostByIdApi(item.data.postId);
+        const res = await getPostByIdApi(item.data.postId, accessToken ?? undefined);
         const post = res.data.post;
         const isService =
           (post as any).requestType === 'service' ||

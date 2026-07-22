@@ -15,8 +15,7 @@ import { getPostByIdApi, getOrCreateConversationApi, getMeApi, type Post } from 
 import { useAuth }  from '../../store/authStore';
 import { useSaved } from '../../store/savedStore';
 
-const BG    = '#F2EFE6';
-const CARD  = '#FFFFFF';
+const BG    = '#FFFFFF';
 const DARK  = '#1B3A2D';
 const AMBER = '#E8943A';
 const GREEN = '#2E7D52';
@@ -96,8 +95,8 @@ export default function ServiceDetailScreen() {
 
   useEffect(() => {
     if (!id) { setError('No post ID.'); setLoading(false); return; }
-    getPostByIdApi(id).then((res) => setPost(res.data.post)).catch((err) => setError(err?.message ?? 'Failed to load.')).finally(() => setLoading(false));
-  }, [id]);
+    getPostByIdApi(id, accessToken ?? undefined).then((res) => setPost(res.data.post)).catch((err) => setError(err?.message ?? 'Failed to load.')).finally(() => setLoading(false));
+  }, [id, accessToken]);
 
   const goBack = () => {
     if (from === '/home/browse')               router.replace('/home/browse');
@@ -205,7 +204,7 @@ export default function ServiceDetailScreen() {
             <Text style={styles.statLabel}>Budget</Text>
             <Text style={styles.statValue}>{formatBudget(post.budget)}</Text>
           </View>
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, styles.locationCard]}>
             <View style={[styles.statIconBox, { backgroundColor: '#E8F4EC' }]}><Ionicons name="location-outline" size={18} color={GREEN} /></View>
             <Text style={styles.statLabel}>Location</Text>
             <Text style={styles.statValue} numberOfLines={2}>{post.location}</Text>
@@ -239,25 +238,6 @@ export default function ServiceDetailScreen() {
             <Text style={styles.descText}>{post.description}</Text>
           </View>
         )}
-
-        {/* Posted by */}
-        <View style={styles.detailCard}>
-          <Text style={styles.cardHeading}>Posted by</Text>
-          <View style={styles.buyerCard}>
-            <View style={styles.buyerAvatarWrap}>
-              {buyer.profilePicture
-                ? <Image source={{ uri: buyer.profilePicture }} style={styles.buyerAvatar} />
-                : <View style={[styles.buyerAvatar, { backgroundColor: AMBER, alignItems: 'center', justifyContent: 'center' }]}><Text style={styles.buyerInitials}>{initials}</Text></View>
-              }
-              <View style={styles.onlineDot} />
-            </View>
-            <View style={styles.buyerInfo}>
-              <Text style={styles.buyerName}>{buyer.fullName}</Text>
-              <View style={styles.verifiedRow}><Ionicons name="shield-checkmark" size={12} color={GREEN} /><Text style={styles.verifiedText}>Verified Buyer</Text></View>
-            </View>
-            <View style={styles.buyerBadge}><Text style={styles.buyerBadgeText}>Buyer</Text></View>
-          </View>
-        </View>
 
         <View style={styles.tipBanner}>
           <View style={styles.tipIconBox}><Ionicons name="bulb-outline" size={20} color={AMBER} /></View>
@@ -306,7 +286,7 @@ const styles = StyleSheet.create({
   retryText:   { fontSize: 13, fontWeight: '700', color: '#fff' },
 
   floatRow: { position: 'absolute', left: 0, right: 0, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20 },
-  floatBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
+  floatBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
 
   hero:             { backgroundColor: HERO, alignItems: 'center', paddingBottom: 40, overflow: 'hidden' },
   heroPatternDot1:  { position: 'absolute', top: 20, right: 30, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.04)' },
@@ -334,12 +314,13 @@ const styles = StyleSheet.create({
   descText:     { fontSize: 13, color: '#5A6E65', lineHeight: 22 },
 
   statRow:  { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginTop: 6, marginBottom: 4 },
-  statCard: { flex: 1, backgroundColor: CARD, borderRadius: 14, padding: 12, alignItems: 'center', gap: 6, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2, borderWidth: 1, borderColor: '#EAE6DC' },
+  statCard: { flex: 1, minWidth: 0, padding: 12, alignItems: 'center', gap: 6 },
+  locationCard: { flex: 1.35 },
   statIconBox: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   statLabel:   { fontSize: 9, color: MUTED, fontWeight: '600' },
-  statValue:   { fontSize: 11, fontWeight: '800', color: DARK, textAlign: 'center' },
+  statValue:   { fontSize: 11, fontWeight: '800', color: DARK, textAlign: 'center', flexShrink: 1 },
 
-  detailCard:   { marginHorizontal: 16, marginTop: 12, backgroundColor: CARD, borderRadius: 16, padding: 18, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
+  detailCard:   { marginHorizontal: 16, marginTop: 12, padding: 18 },
   cardHeading:  { fontSize: 13, fontWeight: '700', color: DARK, marginBottom: 14, textTransform: 'uppercase', letterSpacing: 0.5 },
   detailRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   detailIconBox:{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
@@ -360,17 +341,17 @@ const styles = StyleSheet.create({
   buyerBadge:      { backgroundColor: '#E8F4EC', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   buyerBadgeText:  { fontSize: 10, fontWeight: '700', color: GREEN },
 
-  tipBanner:  { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: '#FFF8F0', borderRadius: 14, padding: 14, marginHorizontal: 16, marginTop: 12, marginBottom: 6, borderWidth: 1, borderColor: '#F5E0C8' },
+  tipBanner:  { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14, marginHorizontal: 16, marginTop: 12, marginBottom: 6 },
   tipIconBox: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FDE9D0', alignItems: 'center', justifyContent: 'center' },
   tipText:    { flex: 1, fontSize: 12, color: DARK, lineHeight: 19 },
 
-  bottomBar:      { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', gap: 12, backgroundColor: CARD, paddingHorizontal: 20, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#E5E1D8', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, elevation: 10 },
-  actionBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: AMBER, borderRadius: 14, height: 52, shadowColor: AMBER, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
-  actionBtnText:  { fontSize: 15, fontWeight: '800', color: '#fff' },
-  actionBtnSmall: { width: 52, height: 52, borderRadius: 14, backgroundColor: CARD, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
+  bottomBar:      { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', gap: 10, backgroundColor: BG, paddingHorizontal: 16, paddingTop: 8 },
+  actionBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: AMBER, borderRadius: 12, height: 44, shadowColor: AMBER, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  actionBtnText:  { fontSize: 13, fontWeight: '800', color: '#fff' },
+  actionBtnSmall: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
 
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  modalCard:         { width: '100%', backgroundColor: CARD, borderRadius: 20, padding: 28, alignItems: 'center', gap: 12 },
+  modalCard:         { width: '100%', backgroundColor: BG, borderRadius: 20, padding: 28, alignItems: 'center', gap: 12 },
   modalIconBox:      { width: 72, height: 72, borderRadius: 36, backgroundColor: '#FEF3E2', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   modalTitle:        { fontSize: 18, fontWeight: '900', color: DARK, textAlign: 'center' },
   modalBody:         { fontSize: 13, color: MUTED, textAlign: 'center', lineHeight: 20 },

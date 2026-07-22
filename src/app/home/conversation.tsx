@@ -24,7 +24,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '@/store/authStore';
-import { useUnread } from '@/store/unreadStore';
 import {
   getMessagesApi, sendMessageApi,
   type ChatMessage, type Conversation,
@@ -90,7 +89,6 @@ export default function ConversationScreen() {
     autoMessage?: string;
   }>();
   const { state: { accessToken, user } } = useAuth();
-  const { setTotalUnread, totalUnread }  = useUnread();
   const isFocused = useIsFocused();
 
   const flatRef      = useRef<FlatList>(null);
@@ -152,12 +150,9 @@ export default function ConversationScreen() {
     if (!conversationId || !isFocused) return;
 
     SocketService.emit('join_conversation', { conversationId });
-    SocketService.emit('mark_read',         { conversationId });
-
-    // Optimistically drop the badge immediately — don't wait for the server
-    // round-trip. The AppBridge will re-sync the exact number from the server
-    // when it receives conversation_read from the socket.
-    setTotalUnread(Math.max(0, totalUnread - 1));
+    // The authenticated message request marks this user's existing messages
+    // as read and the server broadcasts the updated count to all app screens.
+    void loadMessages();
 
     const unsubNewMessage = SocketService.on('new_message', (msg: ChatMessage & { localId?: string }) => {
       if (msg.conversation !== conversationId) return;
@@ -177,7 +172,6 @@ export default function ConversationScreen() {
         return [...prev, msg];
       });
 
-      SocketService.emit('mark_read', { conversationId });
       setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 80);
     });
 
@@ -191,7 +185,7 @@ export default function ConversationScreen() {
       unsubConversationRead();
       SocketService.emit('leave_conversation', { conversationId });
     };
-  }, [conversationId, myId]);
+  }, [conversationId, isFocused, loadMessages, myId]);
 
   // ── Core send logic (used by both manual send and auto-intro) ──
   const sendText = async (text: string) => {
@@ -284,7 +278,11 @@ export default function ConversationScreen() {
           </TouchableOpacity>
 
           {other && (
-            <>
+            <TouchableOpacity
+              style={styles.profileTrigger}
+              activeOpacity={0.75}
+              onPress={() => router.push({ pathname: '/home/chat-profile', params: { id: other._id, conversationId } })}
+            >
               <Avatar uri={other.profilePicture} name={other.fullName} size={40} />
               <View style={styles.headerInfo}>
                 <Text style={styles.headerName} numberOfLines={1}>{other.fullName}</Text>
@@ -292,10 +290,10 @@ export default function ConversationScreen() {
                   <Text style={styles.headerSub} numberOfLines={1}>Re: {postTitle}</Text>
                 ) : null}
               </View>
-            </>
+            </TouchableOpacity>
           )}
 
-          {other?.phone ? (
+          {other?.phone && conversation?.post?.contactPreference !== 'Chat' ? (
             <TouchableOpacity
               style={styles.callBtn}
               hitSlop={8}
@@ -374,6 +372,7 @@ const styles = StyleSheet.create({
     backgroundColor: CATBG, alignItems: 'center', justifyContent: 'center',
   },
   avatarCircle: { backgroundColor: AMBER, alignItems: 'center', justifyContent: 'center' },
+  profileTrigger: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerInfo:   { flex: 1 },
   headerName:   { fontSize: 14, fontWeight: '700', color: DARK },
   headerSub:    { fontSize: 10, color: AMBER, fontWeight: '600', marginTop: 1 },

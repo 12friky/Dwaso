@@ -5,7 +5,7 @@
  */
 
 import React, {
-  createContext, useContext, useReducer, useCallback, ReactNode,
+  createContext, useContext, useReducer, useCallback, useRef, ReactNode,
 } from 'react';
 import {
   AppNotification,
@@ -69,20 +69,29 @@ interface NotifContextType {
   markRead:       (id: string, token: string) => Promise<void>;
   markAllRead:    (token: string) => Promise<void>;
   clearAll:       (token: string) => Promise<void>;
+  reset:          () => void;
 }
 const NotifContext = createContext<NotifContextType | null>(null);
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initial);
+  const requestIdRef = useRef(0);
 
   const loadNotifications = useCallback(async (token: string) => {
+    const requestId = ++requestIdRef.current;
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const res = await getNotificationsApi(token);
-      dispatch({ type: 'SET_ALL', payload: res.data });
+      if (requestId === requestIdRef.current) {
+        dispatch({ type: 'SET_ALL', payload: res.data });
+      }
     } catch { /* non-fatal */ }
-    finally { dispatch({ type: 'SET_LOADING', payload: false }); }
+    finally {
+      if (requestId === requestIdRef.current) {
+        dispatch({ type: 'SET_LOADING', payload: false });
+      }
+    }
   }, []);
 
   const prependNotif = useCallback((notif: AppNotification) => {
@@ -104,8 +113,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     try { await clearAllNotificationsApi(token); } catch {}
   }, []);
 
+  const reset = useCallback(() => {
+    requestIdRef.current += 1;
+    dispatch({ type: 'CLEAR' });
+  }, []);
+
   return (
-    <NotifContext.Provider value={{ state, loadNotifications, prependNotif, markRead, markAllRead, clearAll }}>
+    <NotifContext.Provider value={{ state, loadNotifications, prependNotif, markRead, markAllRead, clearAll, reset }}>
       {children}
     </NotifContext.Provider>
   );

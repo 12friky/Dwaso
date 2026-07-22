@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/store/authStore';
 import { useUnread } from '@/store/unreadStore';
@@ -94,6 +95,7 @@ function ConvoRow({ conv, myId }: { conv: Conversation; myId: string }) {
 // ── Screen ────────────────────────────────────────────────
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const { state: { accessToken, user } } = useAuth();
   const { setTotalUnread } = useUnread();
 
@@ -134,6 +136,12 @@ export default function ChatScreen() {
     setLoading(true);
     fetchConversations().finally(() => setLoading(false));
   }, [fetchConversations]);
+
+  // Reload when returning from a conversation so the row badge and bottom-tab
+  // badge always use the count the server has just marked as read.
+  useEffect(() => {
+    if (isFocused) void fetchConversations();
+  }, [fetchConversations, isFocused]);
 
   // Real-time list updates — new message arrives
   useEffect(() => {

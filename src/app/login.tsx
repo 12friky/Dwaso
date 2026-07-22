@@ -2,25 +2,39 @@ import { Link, useRouter } from 'expo-router';
 import {
   StyleSheet, View, Text, TextInput,
   TouchableOpacity, Pressable, ActivityIndicator,
+  Image, ScrollView, KeyboardAvoidingView, Platform, Dimensions,
 } from 'react-native';
 import { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { loginApi, type ApiError } from '../services/api';
 import { useAuth } from '../store/authStore';
 
+const { width: W, height: H } = Dimensions.get('window');
+const IMAGE_H = H * 0.42;
+
+const DARK  = '#1B3A2D';
+const AMBER = '#E8943A';
+const GREEN = '#2E7D52';
+const MUTED = '#9CA3AF';
+const CARD  = '#FFFFFF';
+const BORDER= '#E5E1D8';
+const RED   = '#D62828';
+
 export default function LoginScreen() {
-  const router = useRouter();
+  const router  = useRouter();
+  const insets  = useSafeAreaInsets();
   const { setUser } = useAuth();
 
-  const [phoneNumber,   setPhoneNumber]   = useState('');
-  const [password,      setPassword]      = useState('');
-  const [showPassword,  setShowPassword]  = useState(false);
-  const [error,         setError]         = useState('');
-  const [loading,       setLoading]       = useState(false);
+  const [phoneNumber,  setPhoneNumber]  = useState('');
+  const [password,     setPassword]     = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error,        setError]        = useState('');
+  const [loading,      setLoading]      = useState(false);
 
   const handlePhoneChange = (value: string) => {
-    const digits = value.replace(/\D/g, '');
-    setPhoneNumber(digits.slice(0, 10));
+    setPhoneNumber(value.replace(/\D/g, '').slice(0, 10));
     setError('');
   };
 
@@ -29,13 +43,10 @@ export default function LoginScreen() {
       setError('Please enter your phone number and password.');
       return;
     }
-
     setLoading(true);
     setError('');
-
     try {
       const res = await loginApi({ phone: phoneNumber, password });
-      // Save user globally then go to feed
       setUser(res.data.user, res.data.accessToken);
       router.replace('/home/feed');
     } catch (err) {
@@ -47,163 +58,234 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View>
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <View style={styles.logoBox}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {/* ── Hero image ── */}
+      <View style={styles.heroWrap}>
+        <Image
+          source={require('../../assets/images/login image.png')}
+          style={styles.heroImage}
+          resizeMode="cover"
+        />
+        {/* App name on image */}
+        <View style={[styles.heroTop, { paddingTop: insets.top + 16 }]}>
+          <View style={styles.logoBadge}>
             <View style={styles.logoDot} />
           </View>
-          <Text style={styles.logoText}>Dwaso</Text>
+          <Text style={styles.appName}>Dwaso</Text>
         </View>
+      </View>
 
-        {/* Heading */}
+      {/* ── White card sheet ── */}
+      <ScrollView
+        style={styles.sheet}
+        contentContainerStyle={[styles.sheetContent, { paddingBottom: insets.bottom + 32 }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Handle bar */}
+        <View style={styles.handleBar} />
+
         <Text style={styles.title}>Welcome back</Text>
         <Text style={styles.subtitle}>
           Log in to see new offers on the things you're looking for.
         </Text>
 
         {/* Phone */}
-        <View style={styles.field}>
-          <Text style={styles.label}>Phone number</Text>
-          <View style={styles.input}>
-            <Text style={styles.country}>+233</Text>
-            <View style={styles.separator} />
-            <TextInput
-              placeholder="012 345 6789"
-              placeholderTextColor="#B0B7C3"
-              keyboardType="phone-pad"
-              style={styles.textInput}
-              value={phoneNumber}
-              onChangeText={handlePhoneChange}
-              maxLength={10}
-            />
-          </View>
+        <Text style={styles.label}>Phone number</Text>
+        <View style={[styles.inputBox, !!error && !password && styles.inputErr]}>
+          <Text style={styles.dialCode}>+233</Text>
+          <View style={styles.dialSep} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="024 000 0000"
+            placeholderTextColor={MUTED}
+            keyboardType="phone-pad"
+            value={phoneNumber}
+            onChangeText={handlePhoneChange}
+            maxLength={10}
+          />
+          {phoneNumber.length > 0 && (
+            <Ionicons name="checkmark-circle" size={18} color={GREEN} />
+          )}
         </View>
 
         {/* Password */}
-        <View style={styles.field}>
-          <Text style={styles.label}>Password</Text>
-          <View style={[styles.input, styles.passwordInput]}>
-            <TextInput
-              placeholder="••••••••"
-              placeholderTextColor="#B0B7C3"
-              secureTextEntry={!showPassword}
-              style={styles.textInput}
-              value={password}
-              onChangeText={(v) => { setPassword(v); setError(''); }}
+        <Text style={[styles.label, { marginTop: 16 }]}>Password</Text>
+        <View style={[styles.inputBox, !!error && styles.inputErr]}>
+          <Ionicons name="lock-closed-outline" size={16} color={MUTED} style={{ marginRight: 10 }} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="Enter your password"
+            placeholderTextColor={MUTED}
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={(v) => { setPassword(v); setError(''); }}
+          />
+          <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
+            <Ionicons
+              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              size={18}
+              color={MUTED}
             />
-            <TouchableOpacity
-              hitSlop={8}
-              style={styles.eyeButton}
-              onPress={() => setShowPassword((v) => !v)}
-            >
-              <Text style={styles.eyeIcon}>{showPassword ? 'Hide' : 'Show'}</Text>
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity>
-          <Text style={styles.forgot}>Forgot password?</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Error */}
+        {!!error && (
+          <View style={styles.errorRow}>
+            <Ionicons name="alert-circle-outline" size={14} color={RED} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
-      <View>
+        {/* Forgot password */}
+        <TouchableOpacity
+          style={styles.forgotRow}
+          onPress={() => router.push('/forgot-password')}
+          hitSlop={8}
+        >
+          <Text style={styles.forgotText}>Forgot password?</Text>
+        </TouchableOpacity>
+
         {/* Login button */}
-        <Pressable
-          style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+        <TouchableOpacity
+          style={[styles.loginBtn, loading && { opacity: 0.65 }]}
           onPress={handleLogin}
           disabled={loading}
+          activeOpacity={0.88}
         >
           {loading ? (
-            <ActivityIndicator color="#0D2B5C" />
+            <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.loginText}>Log in</Text>
+            <>
+              <Text style={styles.loginBtnText}>Log In</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </>
           )}
-        </Pressable>
-
-        {!!error && <Text style={styles.errorText}>{error}</Text>}
+        </TouchableOpacity>
 
         {/* Divider */}
         <View style={styles.divider}>
-          <View style={styles.line} />
+          <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>New to Dwaso?</Text>
-          <View style={styles.line} />
+          <View style={styles.dividerLine} />
         </View>
 
-        {/* Create Account */}
+        {/* Create account */}
         <Link href="/signup" asChild>
-          <Pressable style={styles.createButton}>
-            <Text style={styles.createText}>Create an account</Text>
+          <Pressable style={styles.createBtn}>
+            <Ionicons name="person-add-outline" size={16} color={DARK} />
+            <Text style={styles.createBtnText}>Create an account</Text>
           </Pressable>
         </Link>
 
-        {/* Footer */}
         <Text style={styles.footer}>
           By continuing you agree to our{' '}
-          <Text style={styles.link}>Terms</Text> &{' '}
-          <Text style={styles.link}>Privacy Policy</Text>
+          <Text style={styles.footerLink}>Terms</Text>
+          {' '}&amp;{' '}
+          <Text style={styles.footerLink}>Privacy Policy</Text>
         </Text>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    justifyContent: 'space-between',
-    paddingHorizontal: 28,
-    paddingTop: 72,
-    paddingBottom: 56,
+  root: { flex: 1, backgroundColor: DARK },
+
+  // ── Hero ──
+  heroWrap: {
+    width: W,
+    height: IMAGE_H,
+    position: 'relative',
   },
-
-  logoContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  logoBox: { width: 32, height: 32, backgroundColor: '#F2AA3B', borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
-  logoDot: { width: 8, height: 8, backgroundColor: '#fff', borderRadius: 4 },
-  logoText: { marginLeft: 10, fontSize: 16, fontWeight: '700', color: '#0D2B5C' },
-
-  title: { fontSize: 28, fontWeight: '700', color: '#0D2B5C', marginBottom: 8 },
-  subtitle: { fontSize: 14, color: '#6B7280', lineHeight: 20, marginBottom: 36 },
-
-  field: { marginBottom: 20 },
-  label: { fontSize: 12, fontWeight: '600', color: '#6B7280', marginBottom: 8 },
-
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroTop: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  logoBadge: {
+    width: 32, height: 32,
+    borderRadius: 10,
+    backgroundColor: AMBER,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  logoDot:  { width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff' },
+  appName:  { fontSize: 20, fontWeight: '900', color: '#fff', letterSpacing: -0.3 },
+
+  // ── Sheet ──
+  sheet: {
+    flex: 1,
+    backgroundColor: CARD,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: -28,
+  },
+  sheetContent: {
+    paddingHorizontal: 28,
+    paddingTop: 8,
+  },
+  handleBar: {
+    width: 40, height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E1D8',
+    alignSelf: 'center',
+    marginBottom: 24,
+    marginTop: 8,
   },
 
-  country: { color: '#4B5563', fontSize: 16, fontWeight: '600' },
-  separator: { width: 1, height: 20, backgroundColor: '#E5E7EB', marginHorizontal: 12 },
-  textInput: { flex: 1, fontSize: 15, color: '#111827' },
+  title:    { fontSize: 26, fontWeight: '900', color: DARK, marginBottom: 6 },
+  subtitle: { fontSize: 13, color: MUTED, lineHeight: 20, marginBottom: 24 },
 
-  passwordInput: { paddingRight: 60 },
-  eyeButton: { position: 'absolute', right: 16 },
-  eyeIcon: { fontSize: 13, fontWeight: '600', color: '#00838F' },
+  label:    { fontSize: 12, fontWeight: '700', color: DARK, marginBottom: 8 },
+  inputBox: {
+    flexDirection: 'row', alignItems: 'center',
+    height: 52, borderWidth: 1.5, borderColor: BORDER,
+    borderRadius: 14, paddingHorizontal: 14,
+    backgroundColor: '#FAFAF8',
+  },
+  inputErr: { borderColor: RED },
+  textInput:{ flex: 1, fontSize: 14, color: DARK },
+  dialCode: { fontSize: 14, fontWeight: '700', color: DARK, marginRight: 10 },
+  dialSep:  { width: 1, height: 20, backgroundColor: BORDER, marginRight: 10 },
 
-  forgot: { color: '#00838F', fontWeight: '600', alignSelf: 'flex-end', fontSize: 13, marginTop: 4 },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  errorText:{ fontSize: 12, color: RED, flex: 1 },
 
-  errorText: { marginTop: 12, color: '#D62828', textAlign: 'center', fontSize: 13 },
+  forgotRow:  { alignItems: 'flex-end', marginTop: 10, marginBottom: 4 },
+  forgotText: { fontSize: 13, fontWeight: '700', color: AMBER },
 
-  loginButton: { height: 52, borderRadius: 14, backgroundColor: '#F2AA3B', justifyContent: 'center', alignItems: 'center' },
-  loginButtonDisabled: { opacity: 0.65 },
-  loginText: { color: '#0D2B5C', fontSize: 16, fontWeight: '700' },
+  loginBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, height: 52, borderRadius: 14, backgroundColor: AMBER,
+    marginTop: 20,
+    shadowColor: AMBER, shadowOpacity: 0.35,
+    shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6,
+  },
+  loginBtnText: { fontSize: 16, fontWeight: '800', color: '#fff' },
 
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 28 },
-  line: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  dividerText: { marginHorizontal: 12, color: '#9CA3AF', fontSize: 13 },
+  divider:     { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: BORDER },
+  dividerText: { marginHorizontal: 12, fontSize: 12, color: MUTED },
 
-  createButton: { height: 52, width: '100%', borderRadius: 14, borderWidth: 1, borderColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center', alignSelf: 'center' },
-  createText: { color: '#0D2B5C', fontWeight: '700', fontSize: 14, textAlign: 'center' },
+  createBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, height: 52, borderRadius: 14,
+    borderWidth: 1.5, borderColor: BORDER,
+    backgroundColor: CARD,
+  },
+  createBtnText: { fontSize: 14, fontWeight: '700', color: DARK },
 
-  footer: { marginTop: 28, textAlign: 'center', color: '#9CA3AF', fontSize: 12, lineHeight: 18 },
-  link: { color: '#00838F', fontWeight: '600' },
+  footer:     { marginTop: 20, textAlign: 'center', fontSize: 12, color: MUTED, lineHeight: 18 },
+  footerLink: { color: GREEN, fontWeight: '700' },
 });
