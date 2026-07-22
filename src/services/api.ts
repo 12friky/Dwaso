@@ -6,7 +6,8 @@
  * e.g. 'http://192.168.191.77:5000'
  * 
  */
-export const BASE_URL = 'http://192.168.36.77:5000';
+// export const BASE_URL = 'http://192.168.36.77:5000';
+export const BASE_URL = 'https://dwasobackend.onrender.com';
 
 const API_URL = `${BASE_URL}/api`;
  
