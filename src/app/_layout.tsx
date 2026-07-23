@@ -160,7 +160,7 @@ async function registerForPushNotifications(): Promise<string | null> {
       importance:  Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor:  '#E8943A',
-      sound:       'message tone.mp3',
+      sound:       'message_tone.mp3',
     });
   }
 
@@ -193,7 +193,7 @@ function AppBridge() {
 
   // Load the notification sound (won't play until .play() is called)
   const player = useAudioPlayer(
-    require('../../assets/sounds/message tone.mp3')
+    require('../../assets/sounds/message_tone.mp3')
   );
 
   const playAlert = useCallback(async () => {
