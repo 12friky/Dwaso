@@ -1,22 +1,18 @@
-/**
- * Lightweight global auth store using React context + useReducer.
- * No external dependency needed.
- */
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import { User } from '../services/api';
+import { saveRefreshToken, deleteRefreshToken } from '../services/tokenManager';
 
-// ─── State ────────────────────────────────────────────────────────────────────
 interface AuthState {
-  user: User | null;
+  user:        User | null;
   accessToken: string | null;
 }
 
 const initialState: AuthState = { user: null, accessToken: null };
 
-// ─── Actions ──────────────────────────────────────────────────────────────────
 type Action =
-  | { type: 'SET_USER';    payload: { user: User; accessToken: string } }
-  | { type: 'UPDATE_USER'; payload: { user: User } }
+  | { type: 'SET_USER';      payload: { user: User; accessToken: string } }
+  | { type: 'UPDATE_USER';   payload: { user: User } }
+  | { type: 'UPDATE_TOKEN';  payload: { accessToken: string } }
   | { type: 'CLEAR_USER' };
 
 function reducer(state: AuthState, action: Action): AuthState {
@@ -24,8 +20,9 @@ function reducer(state: AuthState, action: Action): AuthState {
     case 'SET_USER':
       return { user: action.payload.user, accessToken: action.payload.accessToken };
     case 'UPDATE_USER':
-      // Merge — keeps the existing token, only refreshes the user object
       return { ...state, user: action.payload.user };
+    case 'UPDATE_TOKEN':
+      return { ...state, accessToken: action.payload.accessToken };
     case 'CLEAR_USER':
       return initialState;
     default:
@@ -33,39 +30,42 @@ function reducer(state: AuthState, action: Action): AuthState {
   }
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
 const AuthContext = createContext<{
-  state: AuthState;
-  setUser:    (user: User, accessToken: string) => void;
-  updateUser: (user: User) => void;
-  clearUser:  () => void;
+  state:       AuthState;
+  setUser:     (user: User, accessToken: string, refreshToken: string) => void;
+  updateUser:  (user: User)         => void;
+  updateToken: (accessToken: string) => void;
+  clearUser:   ()                   => void;
 } | null>(null);
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  const setUser    = (user: User, accessToken: string) =>
+  // Save refresh token to SecureStore, access token stays in memory only
+  const setUser = (user: User, accessToken: string, refreshToken: string) => {
+    saveRefreshToken(refreshToken).catch(() => {});
     dispatch({ type: 'SET_USER', payload: { user, accessToken } });
+  };
 
-  const updateUser = (user: User) =>
-    dispatch({ type: 'UPDATE_USER', payload: { user } });
+  const updateUser  = (user: User)          => dispatch({ type: 'UPDATE_USER',  payload: { user } });
+  const updateToken = (accessToken: string) => dispatch({ type: 'UPDATE_TOKEN', payload: { accessToken } });
 
-  const clearUser  = () => dispatch({ type: 'CLEAR_USER' });
+  const clearUser = () => {
+    deleteRefreshToken().catch(() => {});
+    dispatch({ type: 'CLEAR_USER' });
+  };
 
   return (
-    <AuthContext.Provider value={{ state, setUser, updateUser, clearUser }}>
+    <AuthContext.Provider value={{ state, setUser, updateUser, updateToken, clearUser }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
   return ctx;
 }
 
-// Compatibility default export for any module import shape.
 export default { AuthProvider, useAuth };

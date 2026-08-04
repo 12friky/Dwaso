@@ -182,28 +182,46 @@ export default function FeedScreen() {
 
   const makeShakeRef = (idx: number) => (fn: () => void) => { shakeFns.current[idx] = fn; };
 
-  // live posts from backend
-  const [livePosts, setLivePosts] = useState<ApiPost[]>([]);
-  const [loadingLive, setLoadingLive] = useState(false);
-
   const getIconForCategory = (cat: string) => {
     const found = CATEGORIES.find((c) => c.browsecat === cat || c.label === cat);
     return (found?.icon as React.ComponentProps<typeof Ionicons>['name']) || 'grid-outline';
   };
 
+  // live posts — SQLite first, then background API sync
+  const [livePosts, setLivePosts] = useState<ApiPost[]>([]);
+  const [loadingLive, setLoadingLive] = useState(false);
+
+  const loadFromDb = useCallback(async () => {
+    try {
+      const { getPostsFromDb } = await import('../../db/repositories/postRepository');
+      const cached = await getPostsFromDb({ limit: 10 });
+      if (cached.length > 0) setLivePosts(cached);
+    } catch { /* non-fatal */ }
+  }, []);
+
+  const refreshFromApi = useCallback(async () => {
+    setLoadingLive(true);
+    try {
+      const res = await getPostsApi({ page: 1, limit: 10 });
+      const posts = res.data.posts || [];
+      if (posts.length > 0) {
+        const { upsertPosts } = await import('../../db/repositories/postRepository');
+        await upsertPosts(posts);
+        setLivePosts(posts);
+      }
+    } catch (err) {
+      console.warn('Failed to refresh live posts', err);
+    } finally {
+      setLoadingLive(false);
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      setLoadingLive(true);
-      try {
-        const res = await getPostsApi({ page: 1, limit: 10 });
-        if (mounted) setLivePosts(res.data.posts || []);
-      } catch (err) {
-        console.warn('Failed to load live posts', err);
-      } finally {
-        if (mounted) setLoadingLive(false);
-      }
-    })();
+    // 1. Show cached data instantly
+    loadFromDb();
+    // 2. Refresh from API in background
+    refreshFromApi();
     return () => { mounted = false; };
   }, []);
 
@@ -270,9 +288,9 @@ export default function FeedScreen() {
         <View style={styles.quickRow}>
           {[
             { icon: 'bag-outline'        as const, label: 'Requested\nProducts', iconBg: '#E8F4EC', iconColor: '#2E7D52', onPress: () => router.push('/home/browse')        },
-            { icon: 'help-circle-outline'as const, label: 'Post\nRequest',       iconBg: '#FEF3E2', iconColor: AMBER,     onPress: () => router.push('/home/my-post')       },
-            { icon: 'construct-outline'  as const, label: 'Service\nRequested',  iconBg: '#FFF4E6', iconColor: '#E8943A', onPress: () => router.push('/home/services') },
-            { icon: 'storefront-outline' as const, label: 'Become\na Seller',    iconBg: '#EAF0FB', iconColor: '#3B6FD4', onPress: () => router.push('/home/become-seller') },
+            { icon: 'construct-outline'  as const, label: 'Requested\nServices', iconBg: '#FFF4E6', iconColor: '#E8943A', onPress: () => router.push('/home/services')       },
+            { icon: 'help-circle-outline'as const, label: 'Post\nRequest',        iconBg: '#FEF3E2', iconColor: AMBER,     onPress: () => router.push('/home/my-post')        },
+            { icon: 'storefront-outline' as const, label: 'Become\na Seller',     iconBg: '#EAF0FB', iconColor: '#3B6FD4', onPress: () => router.push('/home/become-seller') },
           ].map((q, i, arr) => (
             <TouchableOpacity key={q.label} style={[styles.quickItem, i < arr.length - 1 && styles.quickItemBorder]} activeOpacity={0.8} onPress={q.onPress}>
               <View style={[styles.quickIconBox, { backgroundColor: q.iconBg }]}>
@@ -337,13 +355,19 @@ export default function FeedScreen() {
               <Text style={styles.liveBudget}>Budget: <Text style={{ color: AMBER }}>{post.budget ? `GH₵${post.budget}` : '—'}</Text></Text>
               <View style={styles.liveFooter}>
                 <View style={styles.liveAvatarStack}>
-                  {[...Array(3)].map((_, i) => (
+                  {[...Array(Math.min(3, post.notifiedCount ?? 0))].map((_, i) => (
                     <View key={i} style={[styles.liveAvatar, { left: i * 14 }]}>
                       <Text style={{ fontSize: 9 }}>👤</Text>
                     </View>
                   ))}
                 </View>
-                <Text style={styles.liveSellers}>12 sellers notified</Text>
+                {(post.notifiedCount ?? 0) > 0 ? (
+                  <Text style={styles.liveSellers}>
+                    {post.notifiedCount} seller{post.notifiedCount === 1 ? '' : 's'} notified
+                  </Text>
+                ) : (
+                  <Text style={styles.liveSellers}>No sellers notified yet</Text>
+                )}
               </View>
             </TouchableOpacity>
           ))}

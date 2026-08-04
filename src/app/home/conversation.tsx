@@ -16,7 +16,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet, View, Text, FlatList, TouchableOpacity,
-  TextInput, KeyboardAvoidingView, Platform, Image,
+  TextInput, KeyboardAvoidingView, Image,
   ActivityIndicator, Dimensions, Linking,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -260,14 +260,14 @@ export default function ConversationScreen() {
   }
 
   return (
-    // ── KeyboardAvoidingView — proper keyboard handling ──────
-    // iOS: behavior="padding" pushes the whole view up by the keyboard height.
-    // Android: behavior="height" shrinks the view; keyboardVerticalOffset accounts
-    //          for the status bar so the input stays visible.
+    // ── WhatsApp-style keyboard handling ─────────────────────
+    // behavior="padding" on BOTH platforms is the most stable.
+    // keyboardVerticalOffset = top safe area (status bar height) so the
+    // entire screen shifts up cleanly without jitter.
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      behavior="padding"
+      keyboardVerticalOffset={insets.top}
     >
       {/* ── Safe-area top padding ── */}
       <View style={{ paddingTop: insets.top, backgroundColor: CARD }}>
@@ -312,9 +312,8 @@ export default function ConversationScreen() {
         keyExtractor={(m) => m._id}
         contentContainerStyle={[styles.messageList, { paddingBottom: 16 }]}
         showsVerticalScrollIndicator={false}
-        // iOS 15+ — automatically scrolls up when keyboard opens
-        automaticallyAdjustKeyboardInsets
-        // Keeps scroll position when new messages arrive at the bottom
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={

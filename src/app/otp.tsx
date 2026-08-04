@@ -31,11 +31,13 @@ export default function OtpScreen() {
     requestId: initialRequestId,
     prefix:    initialPrefix,
     from:      initialFrom,
+    intent,
   } = useLocalSearchParams<{
     phone: string;
     requestId: string;
     prefix: string;
     from?: string;
+    intent?: string;
   }>();
 
   // requestId + prefix may be updated on resend
@@ -119,11 +121,16 @@ export default function OtpScreen() {
 
     try {
       const res = await verifyOtpApi({ phone: phone ?? '', requestId, prefix, code });
-      setUser(res.data.user, res.data.accessToken);
+      setUser(res.data.user, res.data.accessToken, res.data.refreshToken);
       setVerified(true);
 
       setTimeout(() => {
-        router.replace('/home/feed');
+        // Sellers go to become-seller form after account is created and verified
+        if (intent === 'seller') {
+          router.replace('/home/become-seller');
+        } else {
+          router.replace('/home/feed');
+        }
       }, 700);
     } catch (err) {
       const apiErr = err as ApiError;

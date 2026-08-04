@@ -7,7 +7,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  forgotPasswordApi, resetPasswordApi, resendResetOtpApi, type ApiError,
+  forgotPasswordApi, verifyResetOtpApi, resetPasswordApi, resendResetOtpApi, type ApiError,
 } from '../services/api';
 
 const BG    = '#fff';
@@ -94,7 +94,7 @@ function StepOtp({
   phone: string;
   requestId: string;
   prefix: string;
-  onNext: (code: string) => void;
+  onNext: () => void;
   onUpdateSession: (requestId: string, prefix: string) => void;
 }) {
   const [digits,    setDigits]    = useState<string[]>(Array(OTP_LENGTH).fill(''));
@@ -126,9 +126,18 @@ function StepOtp({
     const code = d.join('');
     if (code.length < OTP_LENGTH) { setError(`Enter the full ${OTP_LENGTH}-digit code.`); return; }
     setLoading(true); setError('');
-    // Pass the entered code to the parent so it can be used in resetPassword
-    setLoading(false);
-    onNext(code);
+    try {
+      // Verify the OTP with Hubtel NOW — wrong codes are rejected here
+      await verifyResetOtpApi({ requestId, prefix, code });
+      onNext();
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setError(apiErr.message ?? 'Incorrect code. Please try again.');
+      setDigits(Array(OTP_LENGTH).fill(''));
+      inputs.current[0]?.focus();
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResend = async () => {
@@ -201,9 +210,9 @@ function StepOtp({
 
 // ── Step 3: New password ───────────────────────────────────────────────────────
 function StepNewPassword({
-  phone, requestId, prefix, code, onDone,
+  requestId, onDone,
 }: {
-  phone: string; requestId: string; prefix: string; code: string;
+  requestId: string;
   onDone: () => void;
 }) {
   const [password,    setPassword]    = useState('');
@@ -218,7 +227,7 @@ function StepNewPassword({
     if (password !== confirm) { setError('Passwords do not match.'); return; }
     setLoading(true); setError('');
     try {
-      await resetPasswordApi({ phone, requestId, prefix, code, newPassword: password });
+      await resetPasswordApi({ requestId, newPassword: password });
       onDone();
     } catch (err) {
       setError((err as ApiError).message ?? 'Could not reset password. Try again.');
@@ -310,7 +319,6 @@ export default function ForgotPasswordScreen() {
   const [phone,     setPhone]     = useState('');
   const [requestId, setRequestId] = useState('');
   const [prefix,    setPrefix]    = useState('');
-  const [otpCode,   setOtpCode]   = useState(''); // stored after OTP step, used in reset
 
   // Step labels for progress indicator
   const STEPS: Step[] = ['phone', 'otp', 'password', 'success'];
@@ -374,17 +382,14 @@ export default function ForgotPasswordScreen() {
               phone={phone}
               requestId={requestId}
               prefix={prefix}
-              onNext={(code) => { setOtpCode(code); setStep('password'); }}
+              onNext={() => setStep('password')}
               onUpdateSession={(rId, pfx) => { setRequestId(rId); setPrefix(pfx); }}
             />
           )}
 
           {step === 'password' && (
             <StepNewPassword
-              phone={phone}
               requestId={requestId}
-              prefix={prefix}
-              code={otpCode}
               onDone={() => setStep('success')}
             />
           )}

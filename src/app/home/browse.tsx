@@ -116,26 +116,44 @@ export default function BrowseScreen() {
   const [activeCat,  setActiveCat]  = useState(paramCat ?? 'All');
   const [activeSort, setActiveSort] = useState('Newest');
 
-  const fetchPosts = useCallback(async (cat: string) => {
+  const fetchPosts = useCallback(async (cat: string, isRefresh = false) => {
     try {
       setError('');
+
+      // 1. Show SQLite cache immediately on first load
+      if (!isRefresh) {
+        const { getPostsFromDb } = await import('../../db/repositories/postRepository');
+        const cached = await getPostsFromDb({
+          requestType: 'product',
+          category: cat === 'All' ? undefined : cat,
+          limit: 50,
+        });
+        if (cached.length > 0) setPosts(cached);
+      }
+
+      // 2. Sync fresh data from API → SQLite → UI
       const res = await getPostsApi({ category: cat === 'All' ? undefined : cat, limit: 50 });
-      // Keep only non-service posts
       const products = res.data.posts.filter(
         (p) => p.category !== 'Services' && !p.serviceType && (p as any).requestType !== 'service'
       );
-      setPosts(products);
+      if (products.length > 0) {
+        const { upsertPosts } = await import('../../db/repositories/postRepository');
+        await upsertPosts(products);
+        setPosts(products);
+      }
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to load. Check your connection.');
+      if (posts.length === 0) {
+        setError(err?.message ?? 'Failed to load. Check your connection.');
+      }
     }
-  }, []);
+  }, [posts.length]);
 
   useEffect(() => {
     setLoading(true);
     fetchPosts(activeCat).finally(() => setLoading(false));
-  }, [activeCat, fetchPosts]);
+  }, [activeCat]);
 
-  const onRefresh = async () => { setRefreshing(true); await fetchPosts(activeCat); setRefreshing(false); };
+  const onRefresh = async () => { setRefreshing(true); await fetchPosts(activeCat, true); setRefreshing(false); };
 
   const filtered = posts
     .filter((p) => {

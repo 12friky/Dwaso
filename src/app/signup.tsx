@@ -5,22 +5,30 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 
 import { signupApi, sendOtpApi, type ApiError } from '../services/api';
 
-const CARD  = '#FFFFFF';
-const DARK  = '#1B3A2D';
-const AMBER = '#E8943A';
-const GREEN = '#2E7D52';
-const MUTED = '#9CA3AF';
-const BORDER= '#E5E1D8';
-const RED   = '#E53935';
+// ─────────────────────────────────────────────────────────────
+// TOKENS — matches the login screen's white editorial style
+// ─────────────────────────────────────────────────────────────
+
+const PAPER  = '#FFFFFF';
+const INK    = '#12241C';
+const DARK   = '#1B3A2D';
+const AMBER  = '#E8943A';
+const GREEN  = '#2E7D52';
+const MUTED  = '#8A8F87';
+const LINE   = '#E7E4DC';
+const FIELD  = '#F7F6F2';
+const RED    = '#C4432E';
 
 export default function SignUpScreen() {
   const insets = useSafeAreaInsets();
+  // intent='seller' means redirect to become-seller after OTP verification
+  const { intent } = useLocalSearchParams<{ intent?: string }>();
 
   const [avatar,      setAvatar]      = useState<string | null>(null);
   const [fullName,    setFullName]    = useState('');
@@ -78,6 +86,7 @@ export default function SignUpScreen() {
           requestId: otpRes.requestId,
           prefix: otpRes.prefix,
           from: 'signup',
+          intent: intent ?? 'buyer',
         },
       } as any);
     } catch (err) {
@@ -108,21 +117,29 @@ export default function SignUpScreen() {
       >
         {/* Back */}
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={8}>
-          <Ionicons name="arrow-back" size={20} color={DARK} />
+          <Ionicons name="arrow-back" size={18} color={INK} />
         </TouchableOpacity>
 
-        {/* Header */}
-        <Text style={styles.appName}>Dwaso</Text>
+        {/* Brand */}
+        <View style={styles.brandRow}>
+          <View style={styles.logoBadge}>
+            <View style={styles.logoDot} />
+          </View>
+          <Text style={styles.appName}>Dwaso</Text>
+        </View>
+
+        {/* Heading */}
         <Text style={styles.title}>Create your account</Text>
+        <View style={styles.titleRule} />
         <Text style={styles.subtitle}>Join Dwaso and let sellers come to you.</Text>
 
         {/* Avatar */}
         <TouchableOpacity style={styles.avatarWrap} onPress={pickAvatar} activeOpacity={0.85}>
           {avatar
             ? <Image source={{ uri: avatar }} style={styles.avatarImg} />
-            : <View style={styles.avatarPlaceholder}><Ionicons name="person-outline" size={28} color={MUTED} /></View>
+            : <View style={styles.avatarPlaceholder}><Ionicons name="person-outline" size={26} color={MUTED} /></View>
           }
-          <View style={styles.cameraBadge}><Ionicons name="camera" size={13} color="#fff" /></View>
+          <View style={styles.cameraBadge}><Ionicons name="camera" size={12} color="#fff" /></View>
         </TouchableOpacity>
         <Text style={styles.avatarHint}>Profile picture (optional)</Text>
 
@@ -213,44 +230,78 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:    { flex: 1, backgroundColor: CARD },
+  root:    { flex: 1, backgroundColor: PAPER },
   content: { paddingHorizontal: 24 },
 
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  backBtn: {
+    width: 34, height: 34, borderRadius: 8,
+    backgroundColor: FIELD,
+    borderWidth: 1, borderColor: LINE,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 24,
+  },
 
-  appName:  { fontSize: 26, fontWeight: '900', color: DARK, letterSpacing: -0.5, marginBottom: 2 },
-  title:    { fontSize: 17, fontWeight: '700', color: DARK, marginBottom: 3 },
-  subtitle: { fontSize: 12, color: MUTED, marginBottom: 20, lineHeight: 17 },
+  // ── Brand ──
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginBottom: 22,
+  },
+  logoBadge: {
+    width: 28, height: 28, borderRadius: 8,
+    backgroundColor: AMBER,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  logoDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#fff' },
+  appName: { fontSize: 16, fontWeight: '900', color: INK, letterSpacing: -0.2 },
+
+  // ── Heading ──
+  title:    { fontSize: 22, fontWeight: '900', color: INK, letterSpacing: -0.5 },
+  titleRule: {
+    width: 34, height: 3, borderRadius: 2,
+    backgroundColor: AMBER,
+    marginTop: 10, marginBottom: 10,
+  },
+  subtitle: { fontSize: 12.5, color: MUTED, lineHeight: 18, marginBottom: 22 },
 
   avatarWrap:        { alignSelf: 'center', marginBottom: 4, position: 'relative' },
   avatarImg:         { width: 72, height: 72, borderRadius: 36, borderWidth: 2.5, borderColor: AMBER },
-  avatarPlaceholder: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', borderStyle: 'dashed' },
-  cameraBadge:       { position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: 12, backgroundColor: AMBER, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: CARD },
-  avatarHint:        { textAlign: 'center', fontSize: 11, color: MUTED, marginBottom: 18 },
+  avatarPlaceholder: { width: 72, height: 72, borderRadius: 36, backgroundColor: FIELD, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: LINE, borderStyle: 'dashed' },
+  cameraBadge:       { position: 'absolute', bottom: 0, right: 0, width: 23, height: 23, borderRadius: 8, backgroundColor: AMBER, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: PAPER },
+  avatarHint:        { textAlign: 'center', fontSize: 11, color: MUTED, marginBottom: 20 },
 
-  label:     { fontSize: 11, fontWeight: '700', color: DARK, marginBottom: 6, marginTop: 12 },
+  label:     { fontSize: 11, fontWeight: '700', color: INK, marginBottom: 6, marginTop: 12, letterSpacing: 0.1 },
   req:       { color: RED },
   opt:       { color: MUTED, fontWeight: '400' },
 
-  // Reduced height inputs
-  inputBox:  { flexDirection: 'row', alignItems: 'center', height: 44, backgroundColor: '#FAFAF8', borderRadius: 12, paddingHorizontal: 12, borderWidth: 1.5, borderColor: BORDER },
+  inputBox:  {
+    flexDirection: 'row', alignItems: 'center', height: 46,
+    backgroundColor: FIELD, borderRadius: 8,
+    paddingHorizontal: 12, borderWidth: 1.5, borderColor: LINE,
+  },
   inputErr:  { borderColor: RED },
   inputIcon: { marginRight: 8 },
-  input:     { flex: 1, fontSize: 13, color: DARK },
-  dialCode:  { fontSize: 13, fontWeight: '700', color: DARK, marginRight: 8 },
-  dialSep:   { width: 1, height: 16, backgroundColor: BORDER, marginRight: 8 },
-  errText:   { fontSize: 11, color: RED, marginTop: 3 },
+  input:     { flex: 1, fontSize: 13, color: INK },
+  dialCode:  { fontSize: 13, fontWeight: '700', color: INK, marginRight: 8 },
+  dialSep:   { width: 1, height: 16, backgroundColor: LINE, marginRight: 8 },
+  errText:   { fontSize: 11, color: RED, marginTop: 4 },
 
-  termsRow:        { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 16, marginBottom: 20 },
-  checkbox:        { width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, borderColor: '#D1D5DB', backgroundColor: CARD, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  termsRow:        { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 18, marginBottom: 22 },
+  checkbox:        { width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, borderColor: LINE, backgroundColor: PAPER, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   checkboxChecked: { backgroundColor: AMBER, borderColor: AMBER },
   termsText:       { flex: 1, fontSize: 12, color: MUTED, lineHeight: 18 },
   termsLink:       { color: AMBER, fontWeight: '700' },
 
-  signUpBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 50, backgroundColor: AMBER, borderRadius: 14, shadowColor: AMBER, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 5 },
-  signUpText:       { fontSize: 15, fontWeight: '800', color: '#fff' },
+  signUpBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 50, backgroundColor: AMBER, borderRadius: 8,
+    shadowColor: AMBER, shadowOpacity: 0.28, shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 }, elevation: 5,
+  },
+  signUpText: { fontSize: 15, fontWeight: '800', color: '#fff' },
 
-  loginRow:  { alignItems: 'center', marginTop: 18 },
+  loginRow:  { alignItems: 'center', marginTop: 20 },
   loginText: { fontSize: 13, color: MUTED },
   loginLink: { color: AMBER, fontWeight: '700' },
 });

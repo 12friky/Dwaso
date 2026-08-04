@@ -232,7 +232,7 @@ export default function ProductDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
         <ImageSection images={post.images} category={post.category} />
 
         <View style={styles.contentCard}>
@@ -273,37 +273,36 @@ export default function ProductDetailScreen() {
           </View>
         )}
 
+        {/* ── Tip + action button — scrolls with content ── */}
         <View style={styles.tipBanner}>
           <View style={styles.tipIconBox}><Ionicons name="bulb-outline" size={20} color={AMBER} /></View>
-          <Text style={styles.tipText}>If you have what this buyer needs, tap <Text style={{ fontWeight: '800', color: AMBER }}>"I Have This!"</Text> to send your offer directly.</Text>
+          <Text style={styles.tipText}>If you have what this buyer needs, use the button below to send your offer directly.</Text>
         </View>
-      </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
-        {contactPref === 'Phone Call' && (
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: AMBER }]} onPress={handleCall} activeOpacity={0.85}>
-            <Ionicons name="call" size={22} color="#fff" /><Text style={styles.actionBtnText}>Call Buyer</Text>
-          </TouchableOpacity>
-        )}
-        {contactPref === 'WhatsApp' && (
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#25D366' }]} onPress={handleWhatsApp} activeOpacity={0.85}>
-            <Ionicons name="logo-whatsapp" size={22} color="#fff" /><Text style={styles.actionBtnText}>WhatsApp Buyer</Text>
-          </TouchableOpacity>
-        )}
-        {contactPref === 'Chat' && (
-          <TouchableOpacity style={styles.actionBtn} onPress={handleChat} activeOpacity={0.88} disabled={chatLoading}>
-            {chatLoading ? <ActivityIndicator size="small" color="#fff" /> : <><Ionicons name="chatbubble-ellipses" size={22} color="#fff" /><Text style={styles.actionBtnText}>I Have This!</Text></>}
-          </TouchableOpacity>
-        )}
-        {!['Phone Call', 'WhatsApp', 'Chat'].includes(contactPref) && (
-          <>
-            <TouchableOpacity style={[styles.actionBtnSmall, { borderColor: AMBER }]} onPress={handleCall}><Ionicons name="call-outline" size={20} color={AMBER} /></TouchableOpacity>
+        {/* Contact button inside scroll */}
+        <View style={[styles.inlineAction, { marginBottom: insets.bottom + 20 }]}>
+          {contactPref === 'Phone Call' && (
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: AMBER }]} onPress={handleCall} activeOpacity={0.85}>
+              <Ionicons name="call" size={22} color="#fff" /><Text style={styles.actionBtnText}>Call Buyer</Text>
+            </TouchableOpacity>
+          )}
+          {contactPref === 'WhatsApp' && (
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#25D366' }]} onPress={handleWhatsApp} activeOpacity={0.85}>
+              <Ionicons name="logo-whatsapp" size={22} color="#fff" /><Text style={styles.actionBtnText}>WhatsApp Buyer</Text>
+            </TouchableOpacity>
+          )}
+          {contactPref === 'Chat' && (
+            <TouchableOpacity style={styles.actionBtn} onPress={handleChat} activeOpacity={0.88} disabled={chatLoading}>
+              {chatLoading ? <ActivityIndicator size="small" color="#fff" /> : <><Ionicons name="chatbubble-ellipses" size={22} color="#fff" /><Text style={styles.actionBtnText}>I Have This!</Text></>}
+            </TouchableOpacity>
+          )}
+          {!['Phone Call', 'WhatsApp', 'Chat'].includes(contactPref) && (
             <TouchableOpacity style={styles.actionBtn} onPress={handleChat} disabled={chatLoading}>
               {chatLoading ? <ActivityIndicator size="small" color="#fff" /> : <><Ionicons name="chatbubble-ellipses" size={20} color="#fff" /><Text style={styles.actionBtnText}>I Have This!</Text></>}
             </TouchableOpacity>
-          </>
-        )}
-      </View>
+          )}
+        </View>
+      </ScrollView>
 
       <NotSellerModal visible={showGate} onClose={() => setShowGate(false)} onRegister={() => { setShowGate(false); router.push('/home/become-seller'); }} />
     </View>
@@ -363,14 +362,14 @@ const styles = StyleSheet.create({
   buyerBadge:      { backgroundColor: '#E8F4EC', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   buyerBadgeText:  { fontSize: 10, fontWeight: '700', color: GREEN },
 
-  tipBanner:  { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14, marginHorizontal: 16, marginTop: 12, marginBottom: 6 },
+  tipBanner:  { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14, marginHorizontal: 16, marginTop: 12 },
   tipIconBox: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FDE9D0', alignItems: 'center', justifyContent: 'center' },
   tipText:    { flex: 1, fontSize: 12, color: DARK, lineHeight: 19 },
 
-  bottomBar:      { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', gap: 10, backgroundColor: BG, paddingHorizontal: 16, paddingTop: 8 },
-  actionBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: AMBER, borderRadius: 12, height: 44, shadowColor: AMBER, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
-  actionBtnText:  { fontSize: 13, fontWeight: '800', color: '#fff' },
-  actionBtnSmall: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
+  inlineAction:   { paddingHorizontal: 16, paddingTop: 8 },
+  actionBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: AMBER, borderRadius: 14, height: 52, shadowColor: AMBER, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  actionBtnText:  { fontSize: 15, fontWeight: '800', color: '#fff' },
+  actionBtnSmall: { width: 52, height: 52, borderRadius: 14, backgroundColor: BG, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
 
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   modalCard:         { width: '100%', backgroundColor: BG, borderRadius: 20, padding: 28, alignItems: 'center', gap: 12 },

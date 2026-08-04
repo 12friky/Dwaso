@@ -47,7 +47,7 @@ export default function LoginScreen() {
     setError('');
     try {
       const res = await loginApi({ phone: phoneNumber, password });
-      setUser(res.data.user, res.data.accessToken);
+      setUser(res.data.user, res.data.accessToken, res.data.refreshToken);
       router.replace('/home/feed');
     } catch (err) {
       const apiErr = err as ApiError;
@@ -175,7 +175,7 @@ export default function LoginScreen() {
         </View>
 
         {/* Create account */}
-        <Link href="/signup" asChild>
+        <Link href="/account-type" asChild>
           <Pressable style={styles.createBtn}>
             <Ionicons name="person-add-outline" size={16} color={DARK} />
             <Text style={styles.createBtnText}>Create an account</Text>

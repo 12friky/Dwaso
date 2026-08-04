@@ -6,10 +6,57 @@
  * e.g. 'http://192.168.191.77:5000'
  * 
  */
-// export const BASE_URL = 'http://192.168.36.77:5000';
-export const BASE_URL = 'https://dwasobackend.onrender.com';
+export const BASE_URL = 'http://192.168.82.77:5000';
+
+// export const BASE_URL = 'https://dwasobackend.onrender.com';
 
 const API_URL = `${BASE_URL}/api`;
+
+// ─── Token refresh callback ───────────────────────────────────────────────────
+// Wired up in _layout.tsx once auth store is available.
+type RefreshCallback = () => Promise<string>;
+type LogoutCallback  = () => void;
+
+let _onRefresh: RefreshCallback | null = null;
+let _onLogout:  LogoutCallback  | null = null;
+
+export function setTokenCallbacks(onRefresh: RefreshCallback, onLogout: LogoutCallback) {
+  _onRefresh = onRefresh;
+  _onLogout  = onLogout;
+}
+
+/**
+ * Drop-in replacement for fetch that transparently refreshes the access token
+ * on 401 and retries the original request once. All concurrent 401s are
+ * queued by tokenManager so refresh only fires once.
+ */
+export async function fetchWithAuth(
+  url: string,
+  options: RequestInit & { _isRetry?: boolean } = {}
+): Promise<Response> {
+  const res = await fetch(url, options);
+
+  if (
+    res.status === 401 &&
+    !options._isRetry &&
+    options.headers &&
+    (options.headers as Record<string, string>)['Authorization'] &&
+    _onRefresh
+  ) {
+    try {
+      const newToken = await _onRefresh();
+      const newHeaders = {
+        ...(options.headers as Record<string, string>),
+        Authorization: `Bearer ${newToken}`,
+      };
+      return fetch(url, { ...options, headers: newHeaders, _isRetry: true } as any);
+    } catch {
+      return res;
+    }
+  }
+
+  return res;
+}
  
 async function parseApiResponse<T>(res: Response): Promise<T> {
   let json: any;
@@ -101,7 +148,7 @@ export async function signupApi(payload: SignupPayload): Promise<SignupResponse>
 
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/auth/signup`, {
+    res = await fetchWithAuth(`${API_URL}/auth/signup`, {
       method: 'POST',
       body: form,
       // Do NOT set Content-Type — fetch sets it automatically with the boundary
@@ -121,7 +168,7 @@ export interface LoginPayload {
 }
 
 export async function loginApi(payload: LoginPayload): Promise<AuthResponse> {
-  const res = await fetch(`${API_URL}/auth/login`, {
+  const res = await fetchWithAuth(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -166,6 +213,8 @@ export interface Post {
   showInFeed: boolean;
   status: 'open' | 'closed' | 'fulfilled';
   createdAt: string;
+  /** Real count of sellers notified for this post */
+  notifiedCount?: number;
 }
 
 export interface CreatePostPayload {
@@ -243,7 +292,7 @@ export async function createPostApi(
     form.append('images', { uri, name: filename, type } as any);
   });
 
-  const res = await fetch(`${API_URL}/posts`, {
+  const res = await fetchWithAuth(`${API_URL}/posts`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: form,
@@ -277,7 +326,7 @@ export async function getPostsApi(params: GetPostsParams = {}): Promise<{
   if (params.limit)       query.append('limit',       String(params.limit));
   if (params.requestType) query.append('requestType', params.requestType);
 
-  const res = await fetch(`${API_URL}/posts?${query.toString()}`);
+  const res = await fetchWithAuth(`${API_URL}/posts?${query.toString()}`);
   const json = await res.json();
   if (!res.ok) throw json as ApiError;
   return json;
@@ -286,7 +335,7 @@ export async function getPostsApi(params: GetPostsParams = {}): Promise<{
 export async function getMyPostsApi(
   accessToken: string
 ): Promise<{ success: boolean; data: { posts: Post[] } }> {
-  const res = await fetch(`${API_URL}/posts/user/my`, {
+  const res = await fetchWithAuth(`${API_URL}/posts/user/my`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -299,7 +348,7 @@ export async function updatePostApi(
   payload: { status: Post['status'] },
   accessToken: string
 ): Promise<{ success: boolean; data: { post: Post } }> {
-  const res = await fetch(`${API_URL}/posts/${id}`, {
+  const res = await fetchWithAuth(`${API_URL}/posts/${id}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -321,7 +370,7 @@ export async function getPostByIdApi(
   const headers: Record<string, string> = {};
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
-  const res  = await fetch(`${API_URL}/posts/${id}`, { headers });
+  const res  = await fetchWithAuth(`${API_URL}/posts/${id}`, { headers });
   const json = await res.json();
   if (!res.ok) throw json as ApiError;
   return json;
@@ -334,7 +383,7 @@ export type SellerStatus = 'none' | 'pending' | 'approved' | 'rejected';
 export async function getSellerStatusApi(
   accessToken: string
 ): Promise<{ success: boolean; data: { status: SellerStatus; applicationId?: string } }> {
-  const res  = await fetch(`${API_URL}/seller/status`, {
+  const res  = await fetchWithAuth(`${API_URL}/seller/status`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -380,7 +429,7 @@ export async function applySellerApi(
   const type     = match ? `image/${match[1]}` : 'image/jpeg';
   form.append('cardFront', { uri: payload.cardFrontUri, name: filename, type } as any);
 
-  const res = await fetch(`${API_URL}/seller/apply`, {
+  const res = await fetchWithAuth(`${API_URL}/seller/apply`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: form,
@@ -421,7 +470,7 @@ export async function getUserProfileApi(
   accessToken: string,
   conversationId: string
 ): Promise<{ success: boolean; data: { user: ChatProfile; request: ChatRequestSummary } }> {
-  const res = await fetch(`${API_URL}/auth/users/${userId}?conversationId=${encodeURIComponent(conversationId)}`, {
+  const res = await fetchWithAuth(`${API_URL}/auth/users/${userId}?conversationId=${encodeURIComponent(conversationId)}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -455,7 +504,7 @@ export async function getOrCreateConversationApi(
   postId: string,
   accessToken: string
 ): Promise<{ success: boolean; data: { conversation: Conversation } }> {
-  const res = await fetch(`${API_URL}/chat`, {
+  const res = await fetchWithAuth(`${API_URL}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ postId }),
@@ -469,7 +518,7 @@ export async function getOrCreateConversationApi(
 export async function getMyConversationsApi(
   accessToken: string
 ): Promise<{ success: boolean; data: { conversations: Conversation[] } }> {
-  const res  = await fetch(`${API_URL}/chat`, {
+  const res  = await fetchWithAuth(`${API_URL}/chat`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -483,7 +532,7 @@ export async function getMessagesApi(
   accessToken: string,
   page = 1
 ): Promise<{ success: boolean; data: { messages: ChatMessage[]; total: number } }> {
-  const res  = await fetch(`${API_URL}/chat/${conversationId}/messages?page=${page}&limit=50`, {
+  const res  = await fetchWithAuth(`${API_URL}/chat/${conversationId}/messages?page=${page}&limit=50`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -497,7 +546,7 @@ export async function sendMessageApi(
   text: string,
   accessToken: string
 ): Promise<{ success: boolean; data: { message: ChatMessage } }> {
-  const res = await fetch(`${API_URL}/chat/${conversationId}/messages`, {
+  const res = await fetchWithAuth(`${API_URL}/chat/${conversationId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ text }),
@@ -524,7 +573,7 @@ export interface UpdateProfilePayload {
 export async function getMeApi(
   accessToken: string
 ): Promise<{ success: boolean; data: { user: User } }> {
-  const res  = await fetch(`${API_URL}/auth/me`, {
+  const res  = await fetchWithAuth(`${API_URL}/auth/me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -557,13 +606,13 @@ export async function updateProfileApi(
     const type     = match ? `image/${match[1]}` : 'image/jpeg';
     form.append('profilePicture', { uri: payload.avatarUri, name: filename, type } as any);
 
-    res = await fetch(url, {
+    res = await fetchWithAuth(url, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,
     });
   } else {
-    res = await fetch(url, {
+    res = await fetchWithAuth(url, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -583,7 +632,7 @@ export async function updateProfileApi(
 export async function getSavedApi(
   accessToken: string
 ): Promise<{ success: boolean; data: { posts: Post[] } }> {
-  const res  = await fetch(`${API_URL}/saved`, {
+  const res  = await fetchWithAuth(`${API_URL}/saved`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -595,7 +644,7 @@ export async function savePostApi(
   postId: string,
   accessToken: string
 ): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${API_URL}/saved`, {
+  const res = await fetchWithAuth(`${API_URL}/saved`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body:    JSON.stringify({ postId }),
@@ -609,7 +658,7 @@ export async function unsavePostApi(
   postId: string,
   accessToken: string
 ): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${API_URL}/saved/${postId}`, {
+  const res = await fetchWithAuth(`${API_URL}/saved/${postId}`, {
     method:  'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -621,7 +670,7 @@ export async function unsavePostApi(
 export async function clearSavedApi(
   accessToken: string
 ): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${API_URL}/saved`, {
+  const res = await fetchWithAuth(`${API_URL}/saved`, {
     method:  'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -645,7 +694,7 @@ export interface AppNotification {
 export async function getNotificationsApi(
   accessToken: string
 ): Promise<{ success: boolean; data: { notifications: AppNotification[]; unreadCount: number } }> {
-  const res  = await fetch(`${API_URL}/notifications`, {
+  const res  = await fetchWithAuth(`${API_URL}/notifications`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -656,7 +705,7 @@ export async function getNotificationsApi(
 export async function markNotificationReadApi(
   id: string, accessToken: string
 ): Promise<{ success: boolean }> {
-  const res  = await fetch(`${API_URL}/notifications/${id}/read`, {
+  const res  = await fetchWithAuth(`${API_URL}/notifications/${id}/read`, {
     method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -667,7 +716,7 @@ export async function markNotificationReadApi(
 export async function markAllNotificationsReadApi(
   accessToken: string
 ): Promise<{ success: boolean }> {
-  const res  = await fetch(`${API_URL}/notifications/read-all`, {
+  const res  = await fetchWithAuth(`${API_URL}/notifications/read-all`, {
     method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -678,7 +727,7 @@ export async function markAllNotificationsReadApi(
 export async function clearAllNotificationsApi(
   accessToken: string
 ): Promise<{ success: boolean }> {
-  const res  = await fetch(`${API_URL}/notifications`, {
+  const res  = await fetchWithAuth(`${API_URL}/notifications`, {
     method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` },
   });
   const json = await res.json();
@@ -689,7 +738,7 @@ export async function clearAllNotificationsApi(
 export async function savePushTokenApi(
   token: string, accessToken: string
 ): Promise<{ success: boolean }> {
-  const res = await fetch(`${API_URL}/notifications/push-token`, {
+  const res = await fetchWithAuth(`${API_URL}/notifications/push-token`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ token }),
@@ -711,7 +760,7 @@ export interface OtpSendResponse {
 export async function sendOtpApi(phone: string): Promise<OtpSendResponse> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/auth/send-otp`, {
+    res = await fetchWithAuth(`${API_URL}/auth/send-otp`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ phone }),
@@ -730,7 +779,7 @@ export async function verifyOtpApi(params: {
 }): Promise<AuthResponse> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/auth/verify-otp`, {
+    res = await fetchWithAuth(`${API_URL}/auth/verify-otp`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(params),
@@ -745,7 +794,7 @@ export async function verifyOtpApi(params: {
 export async function resendOtpApi(requestId: string): Promise<OtpSendResponse> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/auth/resend-otp`, {
+    res = await fetchWithAuth(`${API_URL}/auth/resend-otp`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ requestId }),
@@ -760,7 +809,7 @@ export async function resendOtpApi(requestId: string): Promise<OtpSendResponse> 
 // ─── Forgot / Reset Password ──────────────────────────────────────────────────
 
 export async function forgotPasswordApi(phone: string): Promise<OtpSendResponse> {
-  const res  = await fetch(`${API_URL}/auth/forgot-password`, {
+  const res  = await fetchWithAuth(`${API_URL}/auth/forgot-password`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ phone }),
@@ -770,14 +819,26 @@ export async function forgotPasswordApi(phone: string): Promise<OtpSendResponse>
   return json;
 }
 
-export async function resetPasswordApi(params: {
-  phone: string;
+export async function verifyResetOtpApi(params: {
   requestId: string;
   prefix: string;
   code: string;
+}): Promise<{ success: boolean; message: string }> {
+  const res  = await fetchWithAuth(`${API_URL}/auth/verify-reset-otp`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(params),
+  });
+  const json = await res.json();
+  if (!res.ok) throw json as ApiError;
+  return json;
+}
+
+export async function resetPasswordApi(params: {
+  requestId: string;
   newPassword: string;
 }): Promise<{ success: boolean; message: string }> {
-  const res  = await fetch(`${API_URL}/auth/reset-password`, {
+  const res  = await fetchWithAuth(`${API_URL}/auth/reset-password`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify(params),
@@ -788,7 +849,7 @@ export async function resetPasswordApi(params: {
 }
 
 export async function resendResetOtpApi(requestId: string): Promise<OtpSendResponse> {
-  const res  = await fetch(`${API_URL}/auth/resend-reset-otp`, {
+  const res  = await fetchWithAuth(`${API_URL}/auth/resend-reset-otp`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ requestId }),

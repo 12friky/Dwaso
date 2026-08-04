@@ -81,9 +81,22 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const loadNotifications = useCallback(async (token: string) => {
     const requestId = ++requestIdRef.current;
     dispatch({ type: 'SET_LOADING', payload: true });
+
+    // 1. Serve from SQLite immediately (instant UI)
+    try {
+      const { getNotificationsFromDb } = await import('../db/repositories/notificationRepository');
+      const local = await getNotificationsFromDb();
+      if (local.notifications.length > 0 && requestId === requestIdRef.current) {
+        dispatch({ type: 'SET_ALL', payload: local });
+      }
+    } catch { /* non-fatal */ }
+
+    // 2. Fetch fresh from server and update SQLite
     try {
       const res = await getNotificationsApi(token);
       if (requestId === requestIdRef.current) {
+        const { upsertNotifications } = await import('../db/repositories/notificationRepository');
+        await upsertNotifications(res.data.notifications);
         dispatch({ type: 'SET_ALL', payload: res.data });
       }
     } catch { /* non-fatal */ }
@@ -100,16 +113,29 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const markRead = useCallback(async (id: string, token: string) => {
     dispatch({ type: 'MARK_READ', payload: id });
+    // Write to SQLite immediately
+    try {
+      const { markNotificationReadInDb } = await import('../db/repositories/notificationRepository');
+      await markNotificationReadInDb(id);
+    } catch { /* non-fatal */ }
     try { await markNotificationReadApi(id, token); } catch { /* rollback not critical */ }
   }, []);
 
   const markAllRead = useCallback(async (token: string) => {
     dispatch({ type: 'MARK_ALL_READ' });
+    try {
+      const { markAllNotificationsReadInDb } = await import('../db/repositories/notificationRepository');
+      await markAllNotificationsReadInDb();
+    } catch { /* non-fatal */ }
     try { await markAllNotificationsReadApi(token); } catch {}
   }, []);
 
   const clearAll = useCallback(async (token: string) => {
     dispatch({ type: 'CLEAR' });
+    try {
+      const { clearNotificationsInDb } = await import('../db/repositories/notificationRepository');
+      await clearNotificationsInDb();
+    } catch { /* non-fatal */ }
     try { await clearAllNotificationsApi(token); } catch {}
   }, []);
 

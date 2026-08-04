@@ -23,7 +23,10 @@ import * as Notifications         from 'expo-notifications';
 import * as Device                from 'expo-device';
 import Constants                  from 'expo-constants';
 import SocketService              from '../services/socket';
-import { getMyConversationsApi, savePushTokenApi, type AppNotification } from '../services/api';
+import { getMyConversationsApi, savePushTokenApi, setTokenCallbacks, BASE_URL, type AppNotification } from '../services/api';
+import { performTokenRefresh }    from '../services/tokenManager';
+import { initDatabase }           from '../db/database';
+import { fullSync, flushOfflineQueue, syncFeedPosts } from '../db/syncService';
 
 // ── Configure how notifications behave when app is foregrounded ───────────────
 Notifications.setNotificationHandler({
@@ -184,7 +187,7 @@ async function registerForPushNotifications(): Promise<string | null> {
 // ── AppBridge — socket/notification/sound/push logic ─────────────────────────
 function AppBridge() {
   const router = useRouter();
-  const { state: { accessToken, user } } = useAuth();
+  const { state: { accessToken, user }, updateToken, clearUser } = useAuth();
   const { setTotalUnread }               = useUnread();
   const { loadSaved }                    = useSaved();
   const { state: notificationState, loadNotifications, prependNotif, reset: resetNotifications } = useNotifications();
@@ -233,15 +236,34 @@ function AppBridge() {
     // 1. Connect socket
     SocketService.connect(accessToken);
 
+    // Wire up the transparent token refresh interceptor.
+    // Any fetch call that gets a 401 will call this, get a new access token,
+    // and retry — without the user seeing anything.
+    setTokenCallbacks(
+      () => performTokenRefresh(
+        BASE_URL,
+        (newAccess) => updateToken(newAccess),
+        () => { clearUser(); router.replace('/login'); }
+      ),
+      () => { clearUser(); router.replace('/login'); }
+    );
+
     // Do not let notifications from a previously signed-in account remain on
     // screen while this account's request is in flight.
     resetNotifications();
 
-    // 2. Load saved posts
+    // 2. Load saved posts (SQLite-first via store)
     loadSaved(accessToken);
 
-    // 3. Load existing notifications (no sound — these are old)
+    // 3. Load existing notifications (SQLite-first via store)
     loadNotifications(accessToken);
+
+    // 4. Full data sync — fetches all entities from backend → SQLite
+    //    Runs in background; screens already show cached data instantly.
+    fullSync(accessToken).catch(() => {});
+
+    // 5. Flush any actions that were queued while offline
+    flushOfflineQueue(accessToken).catch(() => {});
 
     // 4. Register for push notifications & save token to backend
     registerForPushNotifications()
@@ -348,6 +370,11 @@ function AppBridge() {
 
 // ── Root layout ───────────────────────────────────────────────────────────────
 export default function RootLayout() {
+  // Initialise SQLite schema on first render — safe to call multiple times
+  useEffect(() => {
+    initDatabase().catch((err) => console.error('[DB] Init failed:', err));
+  }, []);
+
   return (
     <SafeAreaProvider>
       <AuthProvider>
